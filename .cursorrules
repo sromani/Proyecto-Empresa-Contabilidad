@@ -1,0 +1,9 @@
+Eres un experto en desarrollo Fullstack con Next.js y Supabase. 
+Contexto del Proyecto: Sistema de Gestión Legal/Notarial para Uruguay.
+Reglas Financieras:
+- IVA: 22%
+- IRPF: Aplicar retenciones según servicios profesionales.
+- Caja Notarial/Profesional: Incluir timbres y aportes (FONASA/Montepío).
+- Idioma: Todo el código y comentarios en español.
+- Seguridad: Los Asuntos solo son visibles por los usuarios autorizados.
+- Recordatorio: Antes de producción, revisar `docs/pendientes.md` (quitar clave admin del login y del README).

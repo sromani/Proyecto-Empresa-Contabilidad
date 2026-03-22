@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TipoDocumento {
+  RUT
+  CI
+}
+
+enum TipoPersona {
+  FISICA
+  JURIDICA
+}
+
+/// RF: TODOS / LEGAL / NOTARIAL (TODOS aplicable al asunto segun negocio)
+enum TipoAsunto {
+  TODOS
+  NOTARIAL
+  LEGAL
+}
+
+enum RolProfesional {
+  SOCIO
+  ESCRIBANO
+  ABOGADO
+  PROCURADOR
+}
+
+enum EstadoAsunto {
+  EN_TRAMITE
+  FINALIZADO
+}
+
+/// Perfiles de aplicacion (RF-08). USUARIO se mantiene por compatibilidad con datos viejos.
+enum RolApp {
+  ADMIN
+  USUARIO
+  SOCIO
+  PROFESIONAL
+  COLABORADOR
+  CONTADOR
+  SOLO_LECTURA
+}
+
+model Usuario {
+  id            String         @id @default(cuid())
+  usuario       String         @unique
+  nombre        String
+  passwordHash  String
+  rol           RolApp         @default(PROFESIONAL)
+  activo        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  seguimientos  Seguimiento[]
+  auditorias    AuditoriaLog[]
+}
+
+model Cliente {
+  id            String         @id @default(cuid())
+  tipoDocumento TipoDocumento
+  tipoPersona   TipoPersona    @default(FISICA)
+  documento     String         @unique
+  nombre        String
+  contacto      String?
+  telefono      String?
+  email         String?
+  domicilio     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  asuntos       Asunto[]
+}
+
+model AsuntoCatalogo {
+  id        String   @id @default(cuid())
+  nombre    String   @unique
+  createdAt DateTime @default(now())
+  asuntos   Asunto[]
+}
+
+model Profesional {
+  id                      String    @id @default(cuid())
+  nombre                  String
+  profesion               String
+  funcion                 String
+  rol                     RolProfesional
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  asuntosComoPrincipal    Asunto[]  @relation("AsuntoProfesionalACargo")
+  asuntosComoColaborador  Asunto[]  @relation("AsuntoColaborador")
+  asuntosComoContador     Asunto[]  @relation("AsuntoContador")
+}
+
+model Socio {
+  id        String   @id @default(cuid())
+  nombre    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  asuntos   Asunto[]
+}
+
+model Asunto {
+  id                     String        @id @default(cuid())
+  ordinal                Int           @unique @default(autoincrement())
+  tipo                   TipoAsunto
+  descripcion            String?
+  clienteId              String
+  catalogoId             String
+  socioReferenteId       String
+  profesionalACargoId    String
+  colaboradorACargoId    String?
+  contadorReferenteId    String?
+  estado                 EstadoAsunto  @default(EN_TRAMITE)
+  fechaInicio            DateTime      @default(now())
+  fechaFinalizacion      DateTime?
+  fechaAlertaVencimiento DateTime?
+  ultimoMovimientoFecha  DateTime?
+  ultimoMovimientoTexto  String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  cliente            Cliente        @relation(fields: [clienteId], references: [id])
+  catalogo           AsuntoCatalogo @relation(fields: [catalogoId], references: [id])
+  socioReferente     Socio          @relation(fields: [socioReferenteId], references: [id])
+  profesionalACargo  Profesional    @relation("AsuntoProfesionalACargo", fields: [profesionalACargoId], references: [id])
+  colaboradorACargo  Profesional?   @relation("AsuntoColaborador", fields: [colaboradorACargoId], references: [id])
+  contadorReferente  Profesional?   @relation("AsuntoContador", fields: [contadorReferenteId], references: [id])
+  seguimientos       Seguimiento[]
+}
+
+model Seguimiento {
+  id          String   @id @default(cuid())
+  asuntoId    String
+  usuarioId   String?
+  fecha       DateTime @default(now())
+  descripcion String
+  createdAt   DateTime @default(now())
+  asunto      Asunto   @relation(fields: [asuntoId], references: [id], onDelete: Cascade)
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+}
+
+model AuditoriaLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  usuarioId String?
+  accion    String
+  entidad   String
+  entidadId String?
+  detalle   Json?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entidad, entidadId])
+}

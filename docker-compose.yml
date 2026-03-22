@@ -1,0 +1,28 @@
+# PostgreSQL en Docker. Postgres escucha en 5432 *dentro* del contenedor.
+# Formato: "PUERTO_EN_TU_PC:5432" — la segunda cifra siempre es 5432.
+#
+# Ejemplo: 5433 en tu PC → contenedor sigue en 5432 internamente.
+# DATABASE_URL: postgresql://...@127.0.0.1:5433/estudio_uy?schema=public
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: estudio_uy_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: estudio_uy
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d estudio_uy"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+    volumes:
+      - estudio_uy_pgdata:/var/lib/postgresql/data
+
+volumes:
+  estudio_uy_pgdata:
