@@ -19,14 +19,13 @@ Base en Next.js + Tailwind + PostgreSQL (Prisma) para:
 El proyecto ya tiene Git local (rama `main`). **`.env` no se sube** (esta en `.gitignore`).
 
 1. En GitHub: **New repository** → nombre `Proyecto-Empresa-Contablidad` (sin README si ya tenes commits locales).
-2. En la carpeta del proyecto (PowerShell), reemplaza `TU_USUARIO` por tu usuario u organizacion de GitHub:
+2. Remote configurado en este clone: `https://github.com/sromani/Proyecto-Empresa-Contablidad.git`. Para subir:
 
 ```bash
-git remote add origin https://github.com/TU_USUARIO/Proyecto-Empresa-Contablidad.git
 git push -u origin main
 ```
 
-Si ya agregaste un `origin` equivocado: `git remote remove origin` y volve a ejecutar `git remote add ...`.
+Si necesitas crear el remote de nuevo (u otro usuario): `git remote add origin https://github.com/USUARIO/Proyecto-Empresa-Contablidad.git`. Si `origin` esta mal: `git remote remove origin` y volve a agregarlo.
 
 GitHub pedira autenticacion (token personal o GitHub Desktop / Credential Manager).
 
