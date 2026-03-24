@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type RolMe =
   | "ADMIN"
@@ -26,6 +26,7 @@ const linkNav =
 export function BarraNavegacion() {
   const pathname = usePathname();
   const [me, setMe] = useState<Me | null | undefined>(undefined);
+  const ultimoPingRef = useRef(0);
 
   const cargarMe = useCallback(async () => {
     if (pathname === "/login") {
@@ -48,6 +49,39 @@ export function BarraNavegacion() {
   useEffect(() => {
     void cargarMe().catch(() => setMe(null));
   }, [cargarMe]);
+
+  useEffect(() => {
+    if (pathname === "/login") {
+      return;
+    }
+
+    const eventos: (keyof WindowEventMap)[] = [
+      "click",
+      "keydown",
+      "mousemove",
+      "scroll",
+      "touchstart",
+    ];
+
+    const onActividad = () => {
+      const ahora = Date.now();
+      // Evita rafagas: como maximo un ping por minuto.
+      if (ahora - ultimoPingRef.current < 60_000) {
+        return;
+      }
+      ultimoPingRef.current = ahora;
+      void fetch("/api/auth/me", { cache: "no-store" }).catch(() => undefined);
+    };
+
+    for (const e of eventos) {
+      window.addEventListener(e, onActividad, { passive: true });
+    }
+    return () => {
+      for (const e of eventos) {
+        window.removeEventListener(e, onActividad);
+      }
+    };
+  }, [pathname]);
 
   async function cerrarSesion() {
     try {
@@ -77,19 +111,19 @@ export function BarraNavegacion() {
           </Link>
           <span className="hidden h-5 w-px bg-blue-400/40 sm:block" aria-hidden />
           <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-            <Link className={linkNav} href="/clientes" title="Directorio de clientes">
-              Cartera
-            </Link>
             <Link className={linkNav} href="/asuntos">
               Asuntos
             </Link>
             <Link className={linkNav} href="/asuntos/nuevo">
               Nuevo asunto
             </Link>
+            <Link className={linkNav} href="/clientes" title="Directorio de clientes">
+              Clientes
+            </Link>
             <Link className={linkNav} href="/health">
               Health
             </Link>
-            {me?.rol === "ADMIN" || me?.rol === "SOCIO" ? (
+            {me?.rol === "ADMIN" ? (
               <Link className={linkNav} href="/maestros">
                 Socios y profesionales
               </Link>

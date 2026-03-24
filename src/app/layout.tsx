@@ -15,7 +15,7 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="es">
-      <body>
+      <body className="app-text">
         <BarraNavegacion />
         <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
       </body>

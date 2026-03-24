@@ -12,7 +12,14 @@ function parseFechaIso(s: unknown): Date | null {
   if (s === undefined || s === null || s === "") {
     return null;
   }
-  const d = new Date(String(s));
+  const raw = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const ahora = new Date();
+    const d = new Date(`${raw}T00:00:00`);
+    d.setHours(ahora.getHours(), ahora.getMinutes(), ahora.getSeconds(), 0);
+    return d;
+  }
+  const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -115,6 +122,22 @@ export async function PATCH(request: Request, context: Params) {
         entidad: "Asunto",
         entidadId: id,
         detalle: { fechaFinalizacion: fechaFin.toISOString() },
+      });
+
+      await prisma.seguimiento.create({
+        data: {
+          asuntoId: id,
+          descripcion: "Asunto finalizado.",
+          fecha: fechaFin,
+          usuarioId: auth.sesion.sub,
+        },
+      });
+      await prisma.asunto.update({
+        where: { id },
+        data: {
+          ultimoMovimientoFecha: fechaFin,
+          ultimoMovimientoTexto: "Asunto finalizado.",
+        },
       });
 
       return NextResponse.json(actualizado);

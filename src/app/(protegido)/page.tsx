@@ -14,14 +14,14 @@ export default function HomePage() {
           Clientes, asuntos notariales y legales, y seguimiento — base en Next.js y PostgreSQL.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link className="btn-primary inline-flex items-center justify-center" href="/clientes">
-            Directorio de clientes
-          </Link>
-          <Link className="btn-secondary inline-flex items-center justify-center" href="/asuntos">
-            Ver asuntos
+          <Link className="btn-primary inline-flex items-center justify-center" href="/asuntos">
+            Asuntos
           </Link>
           <Link className="btn-secondary inline-flex items-center justify-center" href="/asuntos/nuevo">
             Nuevo asunto
+          </Link>
+          <Link className="btn-secondary inline-flex items-center justify-center" href="/clientes">
+            Clientes
           </Link>
           <Link className="btn-secondary inline-flex items-center justify-center" href="/health">
             Estado del sistema

@@ -78,7 +78,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         error:
-          "Rol invalido. Use uno de: SOCIO, ESCRIBANO, ABOGADO, PROCURADOR.",
+          "Rol invalido. Use uno de: SOCIO, ESCRIBANO, ABOGADO, PROCURADOR, CONTADOR.",
       },
       { status: 400 },
     );

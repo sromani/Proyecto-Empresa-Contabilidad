@@ -1,14 +1,17 @@
-import { EstadoAsunto, TipoPersona } from "@/generated/prisma";
+import { EstadoAsunto, TipoPersona, type TipoDocumento } from "@/generated/prisma";
 import { NextResponse } from "next/server";
 import { requiereApiSesion } from "@/lib/api-auth";
 import { registrarAuditoria } from "@/lib/auditoria";
 import { obtenerErrorConfiguracionDb } from "@/lib/api-db";
 import { prisma } from "@/lib/prisma";
-import { esCiUruguayValida, esRutValido, limpiarDocumento } from "@/lib/validaciones";
+import {
+  esTipoDocumentoCliente,
+  mensajeValidacionDocumentoCliente,
+  normalizarNombrePersona,
+  normalizarDocumentoCliente,
+} from "@/lib/validaciones";
 
 type Params = { params: Promise<{ id: string }> };
-
-type TipoDocumento = "RUT" | "CI";
 export async function PATCH(request: Request, context: Params) {
   const auth = await requiereApiSesion();
   if (!auth.ok) {
@@ -24,8 +27,10 @@ export async function PATCH(request: Request, context: Params) {
 
   try {
     const body = await request.json();
-    const nombre = body?.nombre !== undefined ? String(body.nombre).trim() : undefined;
-    const tipoDocumento = body?.tipoDocumento !== undefined ? (String(body.tipoDocumento) as TipoDocumento) : undefined;
+    const nombre =
+      body?.nombre !== undefined ? normalizarNombrePersona(String(body.nombre)) : undefined;
+    const tipoDocumentoRaw =
+      body?.tipoDocumento !== undefined ? String(body.tipoDocumento).toUpperCase() : undefined;
     const tipoPersonaRaw =
       body?.tipoPersona !== undefined ? String(body.tipoPersona).toUpperCase() : undefined;
     const tipoPersona =
@@ -34,7 +39,7 @@ export async function PATCH(request: Request, context: Params) {
         : tipoPersonaRaw !== undefined
           ? null
           : undefined;
-    const documento = body?.documento !== undefined ? limpiarDocumento(String(body.documento)) : undefined;
+    const documentoInput = body?.documento !== undefined ? String(body.documento) : undefined;
     const contacto = body?.contacto !== undefined ? String(body.contacto).trim() || null : undefined;
     const telefono = body?.telefono !== undefined ? String(body.telefono).trim() || null : undefined;
     const email = body?.email !== undefined ? String(body.email).trim() || null : undefined;
@@ -45,30 +50,34 @@ export async function PATCH(request: Request, context: Params) {
       return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
     }
 
-    if (tipoDocumento !== undefined && tipoDocumento !== "RUT" && tipoDocumento !== "CI") {
+    if (tipoDocumentoRaw !== undefined && !esTipoDocumentoCliente(tipoDocumentoRaw)) {
       return NextResponse.json({ error: "Tipo de documento invalido." }, { status: 400 });
     }
     if (tipoPersona === null) {
       return NextResponse.json({ error: "Tipo de persona invalido." }, { status: 400 });
     }
 
-    const docFinal = documento ?? existente.documento;
-    const tipoDocFinal = tipoDocumento ?? existente.tipoDocumento;
+    const tipoDocFinal = (tipoDocumentoRaw ?? existente.tipoDocumento) as TipoDocumento;
+    const docFinal =
+      documentoInput !== undefined
+        ? normalizarDocumentoCliente(tipoDocFinal, documentoInput)
+        : existente.documento;
 
-    if (tipoDocFinal === "RUT" && !esRutValido(docFinal)) {
-      return NextResponse.json({ error: "El RUT debe tener exactamente 12 digitos." }, { status: 400 });
-    }
-    if (tipoDocFinal === "CI" && !esCiUruguayValida(docFinal)) {
-      return NextResponse.json({ error: "La CI ingresada no es valida para Uruguay." }, { status: 400 });
+    const errDoc = mensajeValidacionDocumentoCliente(
+      tipoDocFinal,
+      documentoInput !== undefined ? documentoInput : docFinal,
+    );
+    if (errDoc) {
+      return NextResponse.json({ error: errDoc }, { status: 400 });
     }
 
     const actualizado = await prisma.cliente.update({
       where: { id },
       data: {
         ...(nombre !== undefined ? { nombre } : {}),
-        ...(tipoDocumento !== undefined ? { tipoDocumento } : {}),
+        ...(tipoDocumentoRaw !== undefined ? { tipoDocumento: tipoDocFinal } : {}),
         ...(tipoPersona !== undefined ? { tipoPersona: tipoPersona as TipoPersona } : {}),
-        ...(documento !== undefined ? { documento: docFinal } : {}),
+        ...(documentoInput !== undefined ? { documento: docFinal } : {}),
         ...(contacto !== undefined ? { contacto } : {}),
         ...(telefono !== undefined ? { telefono } : {}),
         ...(email !== undefined ? { email } : {}),

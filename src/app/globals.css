@@ -7,8 +7,38 @@ body {
 }
 
 @layer components {
+  /* Texto general en estilo Capitalized en toda la app (excepto campos editables). */
+  .app-text :where(
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      p,
+      span,
+      label,
+      a,
+      button,
+      li,
+      th,
+      td,
+      legend
+    ):not([data-no-capitalize]) {
+    text-transform: capitalize;
+  }
+
   .input-app {
     @apply w-full rounded-lg border border-blue-200 bg-white/90 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30;
+  }
+  /* Selectores (combos): texto azul y estilo Capitalized */
+  select.input-app {
+    @apply text-blue-800;
+    text-transform: capitalize;
+  }
+  select.input-app option {
+    @apply text-blue-800;
+    text-transform: capitalize;
   }
   .card-app {
     @apply rounded-xl border border-blue-200/80 bg-white/95 p-6 shadow-md shadow-blue-900/5 backdrop-blur-sm;

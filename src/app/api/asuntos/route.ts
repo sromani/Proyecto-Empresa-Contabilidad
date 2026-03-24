@@ -11,7 +11,9 @@ function parseFechaIso(s: unknown): Date | null {
   if (s === undefined || s === null || s === "") {
     return null;
   }
-  const d = new Date(String(s));
+  const raw = String(s).trim();
+  const isoSoloFecha = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const d = isoSoloFecha ? new Date(`${raw}T00:00:00`) : new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -31,6 +33,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const estadoQ = searchParams.get("estado");
     const tipoQ = searchParams.get("tipo");
+    const profesionalQ = (searchParams.get("profesionalACargoId") ?? "").trim();
+    const socioQ = (searchParams.get("socioReferenteId") ?? "").trim();
+    const anioInicioQ = Number(searchParams.get("anioInicio") ?? "");
+    const inicioDesdeQ = parseFechaIso(searchParams.get("fechaInicioDesde"));
+    const inicioHastaQ = parseFechaIso(searchParams.get("fechaInicioHasta"));
+    const finDesdeQ = parseFechaIso(searchParams.get("fechaFinalizacionDesde"));
+    const finHastaQ = parseFechaIso(searchParams.get("fechaFinalizacionHasta"));
     const q = (searchParams.get("q") ?? "").trim();
 
     const where: Prisma.AsuntoWhereInput = {};
@@ -41,6 +50,43 @@ export async function GET(request: Request) {
 
     if (tipoQ === "TODOS" || tipoQ === "NOTARIAL" || tipoQ === "LEGAL") {
       where.tipo = tipoQ as TipoAsunto;
+    }
+
+    if (profesionalQ) {
+      where.profesionalACargoId = profesionalQ;
+    }
+
+    if (socioQ) {
+      where.socioReferenteId = socioQ;
+    }
+
+    const andFiltros: Prisma.AsuntoWhereInput[] = [];
+    if (Number.isInteger(anioInicioQ) && anioInicioQ >= 1900 && anioInicioQ <= 3000) {
+      andFiltros.push({
+        fechaInicio: {
+          gte: new Date(`${anioInicioQ}-01-01T00:00:00`),
+          lt: new Date(`${anioInicioQ + 1}-01-01T00:00:00`),
+        },
+      });
+    }
+    if (inicioDesdeQ || inicioHastaQ) {
+      andFiltros.push({
+        fechaInicio: {
+          ...(inicioDesdeQ ? { gte: inicioDesdeQ } : {}),
+          ...(inicioHastaQ ? { lte: inicioHastaQ } : {}),
+        },
+      });
+    }
+    if (finDesdeQ || finHastaQ) {
+      andFiltros.push({
+        fechaFinalizacion: {
+          ...(finDesdeQ ? { gte: finDesdeQ } : {}),
+          ...(finHastaQ ? { lte: finHastaQ } : {}),
+        },
+      });
+    }
+    if (andFiltros.length > 0) {
+      where.AND = andFiltros;
     }
 
     if (q) {
@@ -106,7 +152,6 @@ export async function POST(request: Request) {
     const colaboradorACargoId = String(body?.colaboradorACargoId ?? "").trim() || null;
     const contadorReferenteId = String(body?.contadorReferenteId ?? "").trim() || null;
     const socioReferenteId = String(body?.socioReferenteId ?? "");
-    const seguimientoInicial = String(body?.seguimientoInicial ?? "").trim();
     const descripcionLibre = String(body?.descripcion ?? "").trim() || null;
     const fechaInicio = parseFechaIso(body?.fechaInicio) ?? new Date();
     const fechaAlerta = parseFechaIso(body?.fechaAlertaVencimiento);
@@ -115,7 +160,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Tipo de asunto invalido (TODOS, LEGAL o NOTARIAL)." }, { status: 400 });
     }
 
-    if (!clienteId || !asuntoNombre || !socioReferenteId || !seguimientoInicial) {
+    if (!clienteId || !asuntoNombre || !socioReferenteId) {
       return NextResponse.json({ error: "Faltan datos obligatorios." }, { status: 400 });
     }
 
@@ -150,13 +195,6 @@ export async function POST(request: Request) {
           estado: EstadoAsunto.EN_TRAMITE,
           fechaInicio,
           fechaAlertaVencimiento: fechaAlerta,
-          seguimientos: {
-            create: {
-              descripcion: seguimientoInicial,
-              usuarioId: auth.sesion.sub,
-              fecha: new Date(),
-            },
-          },
         },
         include: {
           cliente: { select: { id: true, nombre: true } },
@@ -168,13 +206,11 @@ export async function POST(request: Request) {
           seguimientos: { orderBy: { fecha: "desc" }, take: 1 },
         },
       });
-
-      const ult = creado.seguimientos[0];
       await tx.asunto.update({
         where: { id: creado.id },
         data: {
-          ultimoMovimientoFecha: ult?.fecha ?? new Date(),
-          ultimoMovimientoTexto: ult?.descripcion.slice(0, 500) ?? seguimientoInicial.slice(0, 500),
+          ultimoMovimientoFecha: null,
+          ultimoMovimientoTexto: null,
         },
       });
 

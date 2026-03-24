@@ -1,7 +1,7 @@
 # Sistema de Gestion de Asuntos - Uruguay
 
 Base en Next.js + Tailwind + PostgreSQL (Prisma) para:
-- Gestion de clientes con RUT/CI uruguaya (persona fisica/juridica, contacto).
+- Gestion de clientes con documento **CI** (por defecto), **RUT**, **DNI** o **pasaporte** (persona fisica/juridica, contacto).
 - Alta, edicion y baja de **socios** y **profesionales** desde la app (`/maestros`, rol ADMIN o SOCIO); APIs `GET`/`POST` y `PATCH`/`DELETE` por id (`/api/socios/[id]`, `/api/profesionales/[id]`). La baja en pantalla pide doble confirmacion; si hay asuntos vinculados, la API responde 409.
 - Asuntos TODOS / NOTARIAL / LEGAL con profesional a cargo, fechas y alertas.
 - Listado y ficha de asunto: movimientos, finalizar (socio/admin), reabrir (admin).

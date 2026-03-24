@@ -60,7 +60,14 @@ function puedeMovimiento(rol: RolMe | null): boolean {
 function fmtFecha(s: string | null | undefined): string {
   if (!s) return "—";
   try {
-    return new Date(s).toLocaleString();
+    return new Date(s).toLocaleString("es-UY", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
   } catch {
     return s;
   }
@@ -136,7 +143,7 @@ export function FichaAsunto({ id }: { id: string }) {
     setMensaje("");
     try {
       const body: { descripcion: string; fecha?: string } = { descripcion: movTexto.trim() };
-      if (movFecha) body.fecha = `${movFecha}T12:00:00`;
+      if (movFecha) body.fecha = movFecha;
       const response = await fetch(`/api/asuntos/${id}/movimientos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -171,7 +178,7 @@ export function FichaAsunto({ id }: { id: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accion: "finalizar",
-          fechaFinalizacion: `${fechaFin}T12:00:00`,
+          fechaFinalizacion: fechaFin,
         }),
       });
       const data = await response.json();
@@ -314,6 +321,27 @@ export function FichaAsunto({ id }: { id: string }) {
         </div>
       </div>
 
+      {enTramite && puedeMovimiento(rol) ? (
+        <form className="card-app space-y-3" onSubmit={registrarMovimiento}>
+          <h2 className="text-base font-semibold text-blue-950">Nuevo movimiento</h2>
+          <textarea
+            className="input-app min-h-24 resize-y"
+            placeholder="Descripcion del movimiento"
+            value={movTexto}
+            onChange={(e) => setMovTexto(e.target.value)}
+          />
+          <label className="block space-y-1">
+            <span className="text-sm font-medium text-blue-950">Fecha (por defecto hoy; podés cambiarla)</span>
+            <input className="input-app max-w-xs" type="date" value={movFecha} onChange={(e) => setMovFecha(e.target.value)} />
+          </label>
+          <button className="btn-primary" type="submit" disabled={guardandoMov}>
+            {guardandoMov ? "Guardando..." : "Registrar movimiento"}
+          </button>
+        </form>
+      ) : enTramite && !puedeMovimiento(rol) ? (
+        <p className="text-sm text-blue-800/70">Tu rol no permite registrar movimientos en este asunto.</p>
+      ) : null}
+
       {enTramite && puedeFinalizar(rol) ? (
         <div className="card-app flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="space-y-1">
@@ -337,27 +365,6 @@ export function FichaAsunto({ id }: { id: string }) {
             {accionando ? "..." : "Reabrir asunto (solo admin)"}
           </button>
         </div>
-      ) : null}
-
-      {enTramite && puedeMovimiento(rol) ? (
-        <form className="card-app space-y-3" onSubmit={registrarMovimiento}>
-          <h2 className="text-base font-semibold text-blue-950">Nuevo movimiento</h2>
-          <textarea
-            className="input-app min-h-24 resize-y"
-            placeholder="Descripcion del movimiento"
-            value={movTexto}
-            onChange={(e) => setMovTexto(e.target.value)}
-          />
-          <label className="block space-y-1">
-            <span className="text-sm font-medium text-blue-950">Fecha (por defecto hoy; podés cambiarla)</span>
-            <input className="input-app max-w-xs" type="date" value={movFecha} onChange={(e) => setMovFecha(e.target.value)} />
-          </label>
-          <button className="btn-primary" type="submit" disabled={guardandoMov}>
-            {guardandoMov ? "Guardando..." : "Registrar movimiento"}
-          </button>
-        </form>
-      ) : enTramite && !puedeMovimiento(rol) ? (
-        <p className="text-sm text-blue-800/70">Tu rol no permite registrar movimientos en este asunto.</p>
       ) : null}
 
       <div className="card-app">

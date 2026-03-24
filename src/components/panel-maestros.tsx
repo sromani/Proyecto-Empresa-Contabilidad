@@ -16,6 +16,7 @@ const ROLES_SELECT: { value: string; label: string }[] = [
   { value: "ESCRIBANO", label: "Escribano" },
   { value: "ABOGADO", label: "Abogado" },
   { value: "PROCURADOR", label: "Procurador" },
+  { value: "CONTADOR", label: "Contador" },
 ];
 
 type EliminarPendiente = {

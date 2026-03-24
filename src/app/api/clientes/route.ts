@@ -1,4 +1,4 @@
-import { TipoPersona } from "@/generated/prisma";
+import { TipoPersona, type TipoDocumento } from "@/generated/prisma";
 import { NextResponse } from "next/server";
 import { requiereApiSesion } from "@/lib/api-auth";
 import { registrarAuditoria } from "@/lib/auditoria";
@@ -9,9 +9,12 @@ import {
   obtenerErrorConfiguracionDb,
 } from "@/lib/api-db";
 import { prisma } from "@/lib/prisma";
-import { esCiUruguayValida, esRutValido, limpiarDocumento } from "@/lib/validaciones";
-
-type TipoDocumento = "RUT" | "CI";
+import {
+  esTipoDocumentoCliente,
+  mensajeValidacionDocumentoCliente,
+  normalizarNombrePersona,
+  normalizarDocumentoCliente,
+} from "@/lib/validaciones";
 
 export async function GET(request: Request) {
   const auth = await requiereApiSesion();
@@ -69,20 +72,26 @@ export async function POST(request: Request) {
   }
 
   try {
-    const tipoDocumento = String(body?.tipoDocumento ?? "") as TipoDocumento;
+    const tipoDocumentoRaw = String(body?.tipoDocumento ?? "").toUpperCase();
     const tipoPersonaRaw = String(body?.tipoPersona ?? "FISICA").toUpperCase();
     const tipoPersona =
       tipoPersonaRaw === "JURIDICA" ? TipoPersona.JURIDICA : TipoPersona.FISICA;
-    const nombre = String(body?.nombre ?? "").trim();
+    const nombre = normalizarNombrePersona(String(body?.nombre ?? ""));
     const contacto = body?.contacto != null ? String(body.contacto).trim() || null : null;
     const telefono = body?.telefono != null ? String(body.telefono).trim() || null : null;
     const email = body?.email != null ? String(body.email).trim() || null : null;
     const domicilio = body?.domicilio != null ? String(body.domicilio).trim() || null : null;
-    const documento = limpiarDocumento(String(body?.documento ?? ""));
 
-    if (tipoDocumento !== "RUT" && tipoDocumento !== "CI") {
+    if (!esTipoDocumentoCliente(tipoDocumentoRaw)) {
       return NextResponse.json({ error: "Tipo de documento invalido." }, { status: 400 });
     }
+
+    const docBruto = String(body?.documento ?? "");
+    const errDoc = mensajeValidacionDocumentoCliente(tipoDocumentoRaw, docBruto);
+    if (errDoc) {
+      return NextResponse.json({ error: errDoc }, { status: 400 });
+    }
+    const documento = normalizarDocumentoCliente(tipoDocumentoRaw, docBruto);
 
     if (tipoPersonaRaw !== "FISICA" && tipoPersonaRaw !== "JURIDICA") {
       return NextResponse.json({ error: "Tipo de persona invalido." }, { status: 400 });
@@ -92,27 +101,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El nombre es obligatorio." }, { status: 400 });
     }
 
-    if (!contacto && !telefono && !email) {
-      return NextResponse.json(
-        { error: "Indica al menos un medio de contacto (contacto, telefono o email)." },
-        { status: 400 },
-      );
-    }
-
-    if (tipoDocumento === "RUT" && !esRutValido(documento)) {
-      return NextResponse.json({ error: "El RUT debe tener exactamente 12 digitos." }, { status: 400 });
-    }
-
-    if (tipoDocumento === "CI" && !esCiUruguayValida(documento)) {
-      return NextResponse.json(
-        { error: "La CI ingresada no es valida para Uruguay." },
-        { status: 400 },
-      );
-    }
-
     const cliente = await prisma.cliente.create({
       data: {
-        tipoDocumento,
+        tipoDocumento: tipoDocumentoRaw as TipoDocumento,
         tipoPersona,
         documento,
         nombre,
@@ -146,7 +137,15 @@ export async function POST(request: Request) {
       "code" in error &&
       (error as { code?: string }).code === "P2002"
     ) {
-      return NextResponse.json({ error: "Ya existe un cliente con ese documento." }, { status: 409 });
+      return NextResponse.json(
+        {
+          error:
+            tipoDocumentoRaw === "CI"
+              ? "Esta CI ya esta registrada. No se puede crear el mismo cliente de nuevo."
+              : "Ya existe un cliente con ese documento.",
+        },
+        { status: 409 },
+      );
     }
     const detalle = mensajeErrorPrismaParaUsuario(error);
     const extraDev = mensajeErrorDesarrollo(error);

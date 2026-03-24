@@ -11,6 +11,9 @@ datasource db {
 enum TipoDocumento {
   RUT
   CI
+  DNI
+  PASAPORTE
+  OTROS
 }
 
 enum TipoPersona {
@@ -30,6 +33,7 @@ enum RolProfesional {
   ESCRIBANO
   ABOGADO
   PROCURADOR
+  CONTADOR
 }
 
 enum EstadoAsunto {

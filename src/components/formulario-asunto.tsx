@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 type TipoAsunto = "TODOS" | "NOTARIAL" | "LEGAL";
-type RolProfesional = "SOCIO" | "ESCRIBANO" | "ABOGADO" | "PROCURADOR";
+type RolProfesional = "SOCIO" | "ESCRIBANO" | "ABOGADO" | "PROCURADOR" | "CONTADOR";
 
 type ClienteItem = {
   id: string;
@@ -60,10 +60,12 @@ export function FormularioAsunto() {
   const [descripcion, setDescripcion] = useState("");
   const [fechaInicio, setFechaInicio] = useState(hoyIsoDate);
   const [fechaAlerta, setFechaAlerta] = useState("");
-  const [seguimientoInicial, setSeguimientoInicial] = useState("");
   const [mensaje, setMensaje] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [cargando, setCargando] = useState(true);
+
+  const profesionalesOperativos = profesionales.filter((p) => p.rol !== "CONTADOR");
+  const contadores = profesionales.filter((p) => p.rol === "CONTADOR");
 
   useEffect(() => {
     async function cargarCatalogos() {
@@ -84,7 +86,10 @@ export function FormularioAsunto() {
         setSocios(sociosData);
         setAsuntoSeleccionado(asuntosData[0]?.nombre ?? "");
         setSocioReferente(sociosData[0]?.id ?? "");
-        setProfesionalACargoId(profesionalesData[0]?.id ?? "");
+        setProfesionalACargoId(
+          profesionalesData.find((p) => p.rol !== "CONTADOR")?.id ?? "",
+        );
+        setContadorReferenteId(profesionalesData.find((p) => p.rol === "CONTADOR")?.id ?? "");
       } catch {
         setMensaje("Error al cargar catalogos.");
       } finally {
@@ -179,11 +184,6 @@ export function FormularioAsunto() {
       return;
     }
 
-    if (!seguimientoInicial.trim()) {
-      setMensaje("Ingresa el seguimiento inicial del asunto.");
-      return;
-    }
-
     setGuardando(true);
     try {
       const response = await fetch("/api/asuntos", {
@@ -197,10 +197,9 @@ export function FormularioAsunto() {
           colaboradorACargoId: colaboradorACargoId || null,
           contadorReferenteId: contadorReferenteId || null,
           socioReferenteId: socioReferente,
-          seguimientoInicial,
           descripcion: descripcion.trim() || null,
-          fechaInicio: fechaInicio ? `${fechaInicio}T12:00:00` : undefined,
-          fechaAlertaVencimiento: fechaAlerta ? `${fechaAlerta}T12:00:00` : null,
+          fechaInicio: fechaInicio || undefined,
+          fechaAlertaVencimiento: fechaAlerta || null,
         }),
       });
       const data = await response.json();
@@ -230,16 +229,13 @@ export function FormularioAsunto() {
       <div className="border-b border-blue-100 pb-4">
         <h2 className="text-xl font-semibold text-blue-950">Nuevo Asunto</h2>
         <p className="mt-1 text-sm text-blue-800/70">
-          Tipo, cliente, catalogo, equipo (profesional a cargo obligatorio), fechas y primer movimiento.
+          Tipo, cliente, catalogo, equipo (profesional a cargo obligatorio) y fechas.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <span className="text-sm font-medium text-blue-950">Cliente</span>
-          <p className="text-xs text-blue-800/65">
-            Buscá por nombre o documento (minimo 2 caracteres). La lista puede ser muy grande.
-          </p>
           {clienteElegido ? (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-sm text-emerald-950">
               <span className="min-w-0 flex-1 font-medium">
@@ -309,6 +305,9 @@ export function FormularioAsunto() {
               ) : null}
             </div>
           )}
+          <p className="text-xs text-blue-800/65">
+            Buscá por nombre o documento (minimo 2 caracteres). La lista puede ser muy grande.
+          </p>
         </div>
 
         <label className="space-y-1.5">
@@ -318,9 +317,9 @@ export function FormularioAsunto() {
             value={tipo}
             onChange={(e) => setTipo(e.target.value as TipoAsunto)}
           >
-            <option value="TODOS">TODOS</option>
-            <option value="NOTARIAL">NOTARIAL</option>
-            <option value="LEGAL">LEGAL</option>
+            <option value="TODOS">Todos</option>
+            <option value="NOTARIAL">Notarial</option>
+            <option value="LEGAL">Legal</option>
           </select>
         </label>
       </div>
@@ -397,8 +396,8 @@ export function FormularioAsunto() {
             value={profesionalACargoId}
             onChange={(e) => setProfesionalACargoId(e.target.value)}
           >
-            {profesionales.length === 0 ? <option value="">Sin profesionales</option> : null}
-            {profesionales.map((p) => (
+            {profesionalesOperativos.length === 0 ? <option value="">Sin profesionales</option> : null}
+            {profesionalesOperativos.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre} — {p.profesion} ({p.rol})
               </option>
@@ -414,7 +413,7 @@ export function FormularioAsunto() {
             onChange={(e) => setColaboradorACargoId(e.target.value)}
           >
             <option value="">—</option>
-            {profesionales.map((p) => (
+            {profesionalesOperativos.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre}
               </option>
@@ -430,7 +429,7 @@ export function FormularioAsunto() {
             onChange={(e) => setContadorReferenteId(e.target.value)}
           >
             <option value="">—</option>
-            {profesionales.map((p) => (
+            {contadores.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre}
               </option>
@@ -453,16 +452,6 @@ export function FormularioAsunto() {
             </option>
           ))}
         </select>
-      </label>
-
-      <label className="space-y-1.5">
-        <span className="text-sm font-medium text-blue-950">Seguimiento inicial (primer movimiento) *</span>
-        <textarea
-          className="input-app min-h-28 resize-y"
-          placeholder="Detalle del primer movimiento del asunto"
-          value={seguimientoInicial}
-          onChange={(e) => setSeguimientoInicial(e.target.value)}
-        />
       </label>
 
       <button className="btn-primary" disabled={guardando} type="submit">

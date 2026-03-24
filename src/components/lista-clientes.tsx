@@ -6,6 +6,7 @@ type ClienteRow = {
   id: string;
   nombre: string;
   documento: string;
+  tipoDocumento: string;
   tipoPersona: string;
   telefono: string | null;
   email: string | null;
@@ -92,8 +93,8 @@ export function ListaClientes({ refreshKey = 0 }: { refreshKey?: number }) {
             <thead>
               <tr className="border-b border-blue-200 text-blue-900/80">
                 <th className="pb-2 pr-2 font-medium">Nombre</th>
-                <th className="pb-2 pr-2 font-medium">Doc.</th>
-                <th className="pb-2 pr-2 font-medium">Tipo</th>
+                <th className="pb-2 pr-2 font-medium">Documento</th>
+                <th className="pb-2 pr-2 font-medium">Persona</th>
                 <th className="pb-2 pr-2 font-medium">Contacto</th>
                 <th className="pb-2 font-medium">Acciones</th>
               </tr>
@@ -102,7 +103,10 @@ export function ListaClientes({ refreshKey = 0 }: { refreshKey?: number }) {
               {lista.map((c) => (
                 <tr key={c.id} className="border-b border-blue-100/80">
                   <td className="py-2 pr-2 font-medium text-blue-950">{c.nombre}</td>
-                  <td className="py-2 pr-2 text-blue-900">{c.documento}</td>
+                  <td className="py-2 pr-2 text-blue-900">
+                    <span className="text-xs font-medium text-blue-600">{c.tipoDocumento}</span>{" "}
+                    {c.documento}
+                  </td>
                   <td className="py-2 pr-2 text-blue-800">{c.tipoPersona}</td>
                   <td className="py-2 pr-2 text-blue-900">
                     {[c.telefono, c.email, c.contacto].filter(Boolean).join(" · ") || "—"}

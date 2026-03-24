@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { COOKIE_SESSION, SESSION_MAX_AGE } from "@/lib/auth-constants";
 import { prisma } from "@/lib/prisma";
 import { obtenerSesionServidor } from "@/lib/session-server";
 
@@ -17,5 +19,22 @@ export async function GET() {
     return NextResponse.json({ error: "Usuario no disponible." }, { status: 401 });
   }
 
-  return NextResponse.json(usuario);
+  const response = NextResponse.json(usuario, {
+    headers: { "Cache-Control": "no-store" },
+  });
+
+  // Sliding session: cada uso valido renueva el timeout de inactividad.
+  const jar = await cookies();
+  const token = jar.get(COOKIE_SESSION)?.value;
+  if (token) {
+    response.cookies.set(COOKIE_SESSION, token, {
+      httpOnly: true,
+      path: "/",
+      maxAge: SESSION_MAX_AGE,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
+
+  return response;
 }

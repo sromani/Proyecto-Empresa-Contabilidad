@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Rol invalido. Use uno de: SOCIO, ESCRIBANO, ABOGADO, PROCURADOR.",
+          "Rol invalido. Use uno de: SOCIO, ESCRIBANO, ABOGADO, PROCURADOR, CONTADOR.",
       },
       { status: 400 },
     );
