@@ -11,7 +11,7 @@ export default function AsuntoNuevoPage() {
           </Link>{" "}
           / Nuevo
         </p>
-        <h1 className="mt-1 text-2xl font-bold text-blue-950 md:text-3xl">Alta de asunto</h1>
+        <h1 className="mt-1 text-xl font-bold text-blue-950 sm:text-2xl md:text-3xl">Alta de asunto</h1>
         <p className="mt-1 text-sm text-blue-900/70">
           Tras crear se abre la ficha del asunto con seguimiento y acciones permitidas por rol.
         </p>

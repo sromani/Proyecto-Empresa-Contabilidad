@@ -16,7 +16,7 @@ export function FormularioLogin() {
     >
       <div className="login-plain-card-head border-b border-blue-100 pb-4 text-center">
         <h1>Iniciar sesion</h1>
-        <p className="sub">Usuario y clave del estudio</p>
+        <p className="sub">Usuario y clave de acceso</p>
       </div>
 
       <label className="login-plain-field block space-y-1.5">
@@ -26,7 +26,7 @@ export function FormularioLogin() {
           autoComplete="username"
           className="login-plain-input input-app"
           name="usuario"
-          placeholder="admin"
+          placeholder="Tu usuario"
         />
       </label>
 
@@ -50,11 +50,6 @@ export function FormularioLogin() {
       </button>
 
       {estado?.error ? <p className="login-plain-error">{estado.error}</p> : null}
-
-      <p className="login-plain-hint text-center text-xs text-blue-800/60">
-        Usuario inicial: <strong>admin</strong> / clave: <strong>Admin1234.v1</strong> (cambiar en
-        produccion)
-      </p>
     </form>
   );
 }

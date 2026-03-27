@@ -1,12 +1,19 @@
 import "./globals.css";
 import "./login-plain.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ReactNode } from "react";
 import { BarraNavegacion } from "@/components/barra-navegacion";
+import { APP_VERSION } from "@/lib/version";
 
 export const metadata: Metadata = {
-  title: "Estudio Legal/Notarial UY",
-  description: "Sistema de gestion de clientes y asuntos",
+  title: "Departamento Legal y Notarial",
+  description: `Portal del Departamento Legal y Notarial — clientes y asuntos · v${APP_VERSION}`,
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 /** Respaldo si Tailwind/PostCSS no generan CSS en el entorno (p. ej. cwd o caché rota). */
@@ -29,10 +36,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="es">
       <body
         style={bodyFallback}
-        className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/90 to-sky-100/80 text-slate-900 antialiased"
+        className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-50 via-blue-50/90 to-sky-100/80 text-slate-900 antialiased"
       >
         <BarraNavegacion />
-        <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+        <main className="mx-auto min-w-0 max-w-5xl px-3 py-5 sm:px-4 sm:py-8">{children}</main>
       </body>
     </html>
   );

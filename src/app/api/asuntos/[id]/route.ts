@@ -1,6 +1,7 @@
 import { EstadoAsunto } from "@/generated/prisma";
 import { NextResponse } from "next/server";
 import { requiereApiSesion } from "@/lib/api-auth";
+import { mensajeErrorValidacionEquipoAsunto } from "@/lib/asunto-equipo-validar";
 import { registrarAuditoria } from "@/lib/auditoria";
 import { obtenerErrorConfiguracionDb } from "@/lib/api-db";
 import { prisma } from "@/lib/prisma";
@@ -171,6 +172,110 @@ export async function PATCH(request: Request, context: Params) {
         entidad: "Asunto",
         entidadId: id,
         detalle: {},
+      });
+
+      return NextResponse.json(actualizado);
+    }
+
+    if (accion === "reasignar") {
+      if (!puedeFinalizarAsunto(auth.sesion.rol)) {
+        return NextResponse.json(
+          { error: "Solo administradores o socios pueden reasignar el equipo del asunto." },
+          { status: 403 },
+        );
+      }
+      if (actual.estado !== EstadoAsunto.EN_TRAMITE) {
+        return NextResponse.json(
+          { error: "Solo se puede reasignar equipo en asuntos EN TRAMITE." },
+          { status: 400 },
+        );
+      }
+
+      function parseOptProfFk(v: unknown): string | null {
+        if (v === null || v === undefined) return null;
+        const s = String(v).trim();
+        return s === "" ? null : s;
+      }
+
+      const socioReferenteId =
+        body?.socioReferenteId !== undefined
+          ? String(body.socioReferenteId).trim()
+          : actual.socioReferenteId;
+      const profesionalACargoId =
+        body?.profesionalACargoId !== undefined
+          ? String(body.profesionalACargoId).trim()
+          : actual.profesionalACargoId;
+      const colaboradorACargoId =
+        body?.colaboradorACargoId !== undefined
+          ? parseOptProfFk(body.colaboradorACargoId)
+          : actual.colaboradorACargoId;
+      const colaboradorACargo2Id =
+        body?.colaboradorACargo2Id !== undefined
+          ? parseOptProfFk(body.colaboradorACargo2Id)
+          : actual.colaboradorACargo2Id;
+      const contadorReferenteId =
+        body?.contadorReferenteId !== undefined
+          ? parseOptProfFk(body.contadorReferenteId)
+          : actual.contadorReferenteId;
+
+      const errVal = await mensajeErrorValidacionEquipoAsunto(prisma, {
+        socioReferenteId,
+        profesionalACargoId,
+        colaboradorACargoId,
+        colaboradorACargo2Id,
+        contadorReferenteId,
+      });
+      if (errVal) {
+        return NextResponse.json({ error: errVal }, { status: 400 });
+      }
+
+      const nota = String(body?.notaSeguimiento ?? "").trim() || "Reasignacion de equipo del asunto.";
+
+      const actualizado = await prisma.$transaction(async (tx) => {
+        const upd = await tx.asunto.update({
+          where: { id },
+          data: {
+            socioReferenteId,
+            profesionalACargoId,
+            colaboradorACargoId,
+            colaboradorACargo2Id,
+            contadorReferenteId,
+            ultimoMovimientoFecha: new Date(),
+            ultimoMovimientoTexto: nota,
+          },
+          include: {
+            cliente: true,
+            catalogo: true,
+            socioReferente: true,
+            profesionalACargo: true,
+            colaboradorACargo: true,
+            colaboradorACargo2: true,
+            contadorReferente: true,
+            seguimientos: { orderBy: { fecha: "desc" } },
+          },
+        });
+        await tx.seguimiento.create({
+          data: {
+            asuntoId: id,
+            descripcion: nota,
+            usuarioId: auth.sesion.sub,
+          },
+        });
+        return upd;
+      });
+
+      await registrarAuditoria({
+        usuarioId: auth.sesion.sub,
+        accion: "ASUNTO_REASIGNAR",
+        entidad: "Asunto",
+        entidadId: id,
+        detalle: {
+          socioReferenteId,
+          profesionalACargoId,
+          colaboradorACargoId,
+          colaboradorACargo2Id,
+          contadorReferenteId,
+        },
       });
 
       return NextResponse.json(actualizado);

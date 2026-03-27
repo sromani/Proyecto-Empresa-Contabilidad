@@ -14,7 +14,31 @@
   max-width: 64rem;
   display: flex;
   align-items: center;
-  padding: 1rem 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .login-plain-header-inner {
+    padding: 0.625rem 1rem;
+  }
+}
+
+/* Una sola fila en el cabezal; desplazamiento horizontal si no entra el ancho */
+.nav-barra-oneline {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.nav-barra-oneline::-webkit-scrollbar {
+  height: 4px;
+}
+
+.nav-barra-oneline::-webkit-scrollbar-thumb {
+  background: rgb(147 197 253 / 0.45);
+  border-radius: 999px;
 }
 
 .login-plain-header-title {
@@ -139,17 +163,6 @@ body > main {
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
   color: #7f1d1d;
-}
-
-.login-plain-hint {
-  margin-top: 1rem;
-  text-align: center;
-  font-size: 0.75rem;
-  color: rgb(30 64 175 / 0.65);
-}
-
-.login-plain-hint strong {
-  color: #1e40af;
 }
 
 /* Navegación autenticada si Tailwind no carga */

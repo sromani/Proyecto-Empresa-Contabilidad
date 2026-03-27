@@ -523,7 +523,7 @@ export function FormularioAsunto() {
         </select>
       </label>
 
-      <button className="btn-primary" disabled={guardando} type="submit">
+      <button className="btn-primary w-full sm:w-auto" disabled={guardando} type="submit">
         {guardando ? "Guardando..." : "Crear asunto"}
       </button>
 

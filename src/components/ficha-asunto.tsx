@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type PuestoCatalogo,
   ETIQUETA_PUESTO,
@@ -17,6 +17,17 @@ type RolMe =
   | "CONTADOR"
   | "SOLO_LECTURA";
 
+type GrupoProfCatalogo = "DIRECCION" | "LEGAL_A_CARGO" | "LEGAL_COLABORADOR" | "CONTADOR";
+
+type ProfesionalItem = {
+  id: string;
+  nombre: string;
+  grupo: GrupoProfCatalogo;
+  puesto: string;
+};
+
+type SocioItem = { id: string; nombre: string };
+
 type AsuntoFicha = {
   id: string;
   ordinal: number;
@@ -30,7 +41,7 @@ type AsuntoFicha = {
   ultimoMovimientoTexto: string | null;
   cliente: { id: string; nombre: string; documento: string; telefono?: string | null; email?: string | null };
   catalogo: { nombre: string };
-  socioReferente: { nombre: string };
+  socioReferente: { id: string; nombre: string };
   profesionalACargo: { id: string; nombre: string; puesto: string; funcion?: string | null };
   colaboradorACargo: { id: string; nombre: string } | null;
   colaboradorACargo2: { id: string; nombre: string } | null;
@@ -49,6 +60,10 @@ function puedeFinalizar(rol: RolMe | null): boolean {
 
 function puedeReabrir(rol: RolMe | null): boolean {
   return rol === "ADMIN";
+}
+
+function puedeReasignarEquipo(rol: RolMe | null): boolean {
+  return rol === "ADMIN" || rol === "SOCIO";
 }
 
 function puedeMovimiento(rol: RolMe | null): boolean {
@@ -99,6 +114,19 @@ export function FichaAsunto({ id }: { id: string }) {
   const [fechaFin, setFechaFin] = useState(() => hoyIsoDate());
   const [accionando, setAccionando] = useState(false);
 
+  const [profesionalesCat, setProfesionalesCat] = useState<ProfesionalItem[]>([]);
+  const [sociosCat, setSociosCat] = useState<SocioItem[]>([]);
+  const [reaSocioId, setReaSocioId] = useState("");
+  const [reaProfId, setReaProfId] = useState("");
+  const [reaCol1, setReaCol1] = useState("");
+  const [reaCol2, setReaCol2] = useState("");
+  const [reaCont, setReaCont] = useState("");
+  const [reaNota, setReaNota] = useState("Reasignacion de equipo del asunto.");
+  const [guardandoRea, setGuardandoRea] = useState(false);
+  const [cargandoReaCat, setCargandoReaCat] = useState(false);
+  /** Formulario de reasignación: no visible hasta que el usuario elija la acción. */
+  const [accionReasignarAbierta, setAccionReasignarAbierta] = useState(false);
+
   const cargar = useCallback(async () => {
     setCargando(true);
     setMensaje("");
@@ -113,7 +141,13 @@ export function FichaAsunto({ id }: { id: string }) {
         setAsunto(null);
         return;
       }
-      setAsunto(dataA as AsuntoFicha);
+      const ficha = dataA as AsuntoFicha;
+      setAsunto(ficha);
+      setReaSocioId(ficha.socioReferente.id);
+      setReaProfId(ficha.profesionalACargo.id);
+      setReaCol1(ficha.colaboradorACargo?.id ?? "");
+      setReaCol2(ficha.colaboradorACargo2?.id ?? "");
+      setReaCont(ficha.contadorReferente?.id ?? "");
 
       if (rMe.ok) {
         const me = await rMe.json();
@@ -130,6 +164,34 @@ export function FichaAsunto({ id }: { id: string }) {
   useEffect(() => {
     void cargar().catch(() => setCargando(false));
   }, [cargar]);
+
+  useEffect(() => {
+    setAccionReasignarAbierta(false);
+  }, [id]);
+
+  useEffect(() => {
+    if (
+      asunto?.estado !== "EN_TRAMITE" ||
+      !puedeReasignarEquipo(rol) ||
+      !accionReasignarAbierta
+    ) {
+      setCargandoReaCat(false);
+      return;
+    }
+    setCargandoReaCat(true);
+    void fetch("/api/catalogos")
+      .then(async (r) => {
+        const data = (await r.json()) as {
+          profesionales?: ProfesionalItem[];
+          socios?: SocioItem[];
+        };
+        if (!r.ok) return;
+        setProfesionalesCat(data.profesionales ?? []);
+        setSociosCat(data.socios ?? []);
+      })
+      .catch(() => undefined)
+      .finally(() => setCargandoReaCat(false));
+  }, [asunto?.estado, rol, id, accionReasignarAbierta]);
 
   /** Al abrir otra ficha, las fechas editables vuelven a hoy. */
   useEffect(() => {
@@ -201,6 +263,60 @@ export function FichaAsunto({ id }: { id: string }) {
     }
   }
 
+  const legalACargo = useMemo(
+    () => profesionalesCat.filter((p) => p.grupo === "LEGAL_A_CARGO"),
+    [profesionalesCat],
+  );
+  const colaboradoresLegal = useMemo(
+    () => profesionalesCat.filter((p) => p.grupo === "LEGAL_COLABORADOR"),
+    [profesionalesCat],
+  );
+  const contadoresLista = useMemo(
+    () => profesionalesCat.filter((p) => p.grupo === "CONTADOR"),
+    [profesionalesCat],
+  );
+  const elegiblesCol1 = useMemo(
+    () => colaboradoresLegal.filter((p) => p.id !== reaProfId),
+    [colaboradoresLegal, reaProfId],
+  );
+  const elegiblesCol2 = useMemo(
+    () => elegiblesCol1.filter((p) => !reaCol1 || p.id !== reaCol1),
+    [elegiblesCol1, reaCol1],
+  );
+
+  async function reasignarEquipo(e: React.FormEvent) {
+    e.preventDefault();
+    setGuardandoRea(true);
+    setMensaje("");
+    try {
+      const response = await fetch(`/api/asuntos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accion: "reasignar",
+          socioReferenteId: reaSocioId,
+          profesionalACargoId: reaProfId,
+          colaboradorACargoId: reaCol1.trim() === "" ? null : reaCol1,
+          colaboradorACargo2Id: reaCol2.trim() === "" ? null : reaCol2,
+          contadorReferenteId: reaCont.trim() === "" ? null : reaCont,
+          notaSeguimiento: reaNota.trim() || "Reasignacion de equipo del asunto.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setMensaje(data?.error ?? "No se pudo reasignar.");
+        return;
+      }
+      setAccionReasignarAbierta(false);
+      await cargar();
+      router.refresh();
+    } catch {
+      setMensaje("Error de conexion.");
+    } finally {
+      setGuardandoRea(false);
+    }
+  }
+
   async function reabrir() {
     if (!window.confirm("Reabrir este asunto? Quedara EN TRAMITE.")) return;
     setAccionando(true);
@@ -244,20 +360,22 @@ export function FichaAsunto({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <p className="text-sm text-blue-800/70">
             <Link href="/asuntos" className="font-medium text-blue-700 underline">
               Asuntos
             </Link>{" "}
             / Ordinal {asunto.ordinal}
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-blue-950 md:text-3xl">{asunto.catalogo.nombre}</h1>
-          <p className="mt-1 text-sm text-blue-900">
+          <h1 className="mt-1 break-words text-xl font-bold text-blue-950 sm:text-2xl md:text-3xl">
+            {asunto.catalogo.nombre}
+          </h1>
+          <p className="mt-1 break-words text-sm text-blue-900">
             {asunto.cliente.nombre} · {asunto.cliente.documento}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <span
             className={
               enTramite
@@ -333,8 +451,148 @@ export function FichaAsunto({ id }: { id: string }) {
               <span className="text-blue-800/80">Contador:</span> {asunto.contadorReferente.nombre}
             </p>
           ) : null}
+          {enTramite && puedeReasignarEquipo(rol) && !accionReasignarAbierta ? (
+            <div className="mt-4 border-t border-blue-100 pt-3">
+              <button
+                type="button"
+                className="text-sm font-medium text-blue-800/80 underline decoration-blue-200 underline-offset-2 transition-colors hover:text-blue-950 hover:decoration-blue-400"
+                onClick={() => setAccionReasignarAbierta(true)}
+              >
+                Reasignar equipo…
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
+
+      {enTramite && puedeReasignarEquipo(rol) && accionReasignarAbierta && cargandoReaCat ? (
+        <p className="text-sm text-blue-800/70">Cargando catalogos para reasignar…</p>
+      ) : null}
+
+      {enTramite &&
+      puedeReasignarEquipo(rol) &&
+      accionReasignarAbierta &&
+      !cargandoReaCat &&
+      sociosCat.length > 0 &&
+      legalACargo.length > 0 ? (
+        <form className="card-app space-y-4" onSubmit={(ev) => void reasignarEquipo(ev)}>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h2 className="text-base font-semibold text-blue-950">Reasignar equipo del asunto</h2>
+            <button
+              type="button"
+              className="shrink-0 text-sm font-medium text-blue-800/75 underline decoration-blue-200 underline-offset-2 hover:text-blue-950"
+              onClick={() => setAccionReasignarAbierta(false)}
+            >
+              Ocultar
+            </button>
+          </div>
+          <p className="text-sm text-blue-800/75">
+            Solo asuntos EN TRAMITE. Los cambios quedan en historial y auditoria. Ajustá solo lo que deba cambiar
+            respecto del cuadro actual.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-blue-950">Socio referente</span>
+              <select
+                className="input-app"
+                value={reaSocioId}
+                onChange={(e) => setReaSocioId(e.target.value)}
+              >
+                {sociosCat.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-blue-950">Equipo a cargo (legal / notarial)</span>
+              <select
+                className="input-app"
+                value={reaProfId}
+                onChange={(e) => setReaProfId(e.target.value)}
+              >
+                {legalACargo.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} ({ETIQUETA_PUESTO[p.puesto as PuestoCatalogo] ?? p.puesto})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-blue-950">Colaborador 1 (opcional)</span>
+              <select
+                className="input-app"
+                value={reaCol1}
+                onChange={(e) => setReaCol1(e.target.value)}
+              >
+                <option value="">—</option>
+                {elegiblesCol1.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-blue-950">Colaborador 2 (opcional)</span>
+              <select
+                className="input-app"
+                value={reaCol2}
+                onChange={(e) => setReaCol2(e.target.value)}
+              >
+                <option value="">—</option>
+                {elegiblesCol2.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-sm font-medium text-blue-950">Contador referente (opcional)</span>
+              <select className="input-app" value={reaCont} onChange={(e) => setReaCont(e.target.value)}>
+                <option value="">—</option>
+                {contadoresLista.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-sm font-medium text-blue-950">Nota en historial</span>
+              <input
+                className="input-app"
+                value={reaNota}
+                onChange={(e) => setReaNota(e.target.value)}
+                placeholder="Texto del movimiento registrado"
+              />
+            </label>
+          </div>
+          <button className="btn-secondary" type="submit" disabled={guardandoRea}>
+            {guardandoRea ? "Guardando..." : "Guardar reasignacion"}
+          </button>
+        </form>
+      ) : enTramite &&
+        puedeReasignarEquipo(rol) &&
+        accionReasignarAbierta &&
+        !cargandoReaCat &&
+        (sociosCat.length === 0 || legalACargo.length === 0) ? (
+        <div className="card-app flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-amber-950">
+            No se pudieron cargar los catalogos o faltan socios o personal legal a cargo en Maestros. Revisá la
+            configuración e intentá de nuevo.
+          </p>
+          <button
+            type="button"
+            className="btn-secondary shrink-0 text-sm"
+            onClick={() => setAccionReasignarAbierta(false)}
+          >
+            Cerrar
+          </button>
+        </div>
+      ) : null}
 
       {enTramite && puedeMovimiento(rol) ? (
         <form className="card-app space-y-3" onSubmit={registrarMovimiento}>
@@ -347,7 +605,12 @@ export function FichaAsunto({ id }: { id: string }) {
           />
           <label className="block space-y-1">
             <span className="text-sm font-medium text-blue-950">Fecha (por defecto hoy; podés cambiarla)</span>
-            <input className="input-app max-w-xs" type="date" value={movFecha} onChange={(e) => setMovFecha(e.target.value)} />
+            <input
+              className="input-app w-full max-w-full sm:max-w-xs"
+              type="date"
+              value={movFecha}
+              onChange={(e) => setMovFecha(e.target.value)}
+            />
           </label>
           <button className="btn-primary" type="submit" disabled={guardandoMov}>
             {guardandoMov ? "Guardando..." : "Registrar movimiento"}

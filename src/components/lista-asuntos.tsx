@@ -39,7 +39,7 @@ type RolMe =
   | "SOLO_LECTURA";
 
 const filtroBox =
-  "rounded-xl border border-blue-200/70 bg-gradient-to-br from-white to-blue-50/40 p-4 shadow-sm shadow-blue-950/5";
+  "rounded-xl border border-blue-200/70 bg-gradient-to-br from-white to-blue-50/40 p-3 shadow-sm shadow-blue-950/5 sm:p-4";
 
 const labelFiltro = "mb-1 block text-xs font-semibold uppercase tracking-wide text-blue-800/85";
 
@@ -382,7 +382,9 @@ export function ListaAsuntos() {
         <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50/30 px-6 py-10 text-center">
           <p className="text-base font-medium text-blue-950">No hay asuntos con estos filtros</p>
           <p className="mt-2 text-sm text-blue-800/75">
-            Probá limpiar filtros o crear un asunto nuevo desde el botón de arriba.
+            {hayFiltrosActivos
+              ? "Probá limpiar filtros o ajustar la búsqueda."
+              : "Creá uno desde el botón Crear asunto en la parte superior de esta página."}
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             {hayFiltrosActivos ? (
@@ -394,12 +396,6 @@ export function ListaAsuntos() {
                 Limpiar filtros
               </button>
             ) : null}
-            <Link
-              href="/asuntos/nuevo"
-              className="btn-primary inline-flex items-center justify-center px-4 py-2 text-sm font-medium"
-            >
-              Nuevo asunto
-            </Link>
           </div>
         </div>
       ) : (

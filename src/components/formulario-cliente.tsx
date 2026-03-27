@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
+  ETIQUETA_TIPO_DOCUMENTO_CLIENTE,
+  ETIQUETA_TIPO_PERSONA_CLIENTE,
+  etiquetaTipoDocumentoCliente,
   mensajeValidacionDocumentoCliente,
   normalizarNombrePersona,
   normalizarDocumentoCliente,
+  TIPOS_DOCUMENTO_CLIENTE,
+  TIPOS_PERSONA_CLIENTE,
   type TipoDocumentoCliente,
+  type TipoPersonaCliente,
 } from "@/lib/validaciones";
-
-type TipoPersona = "FISICA" | "JURIDICA";
 
 type ClienteCiExistente = {
   id: string;
@@ -29,7 +33,7 @@ type Props = {
 
 export function FormularioCliente({ onClienteCreado }: Props) {
   const [tipoDocumento, setTipoDocumento] = useState<TipoDocumentoCliente>("CI");
-  const [tipoPersona, setTipoPersona] = useState<TipoPersona>("FISICA");
+  const [tipoPersona, setTipoPersona] = useState<TipoPersonaCliente>("FISICA");
   const [documento, setDocumento] = useState("");
   const [nombre, setNombre] = useState("");
   const [contacto, setContacto] = useState("");
@@ -88,7 +92,7 @@ export function FormularioCliente({ onClienteCreado }: Props) {
           if (data.encontrado && data.cliente) {
             huboAutocompletadoRef.current = true;
             setCiExistente(data.cliente);
-            setTipoPersona(data.cliente.tipoPersona as TipoPersona);
+            setTipoPersona(data.cliente.tipoPersona as TipoPersonaCliente);
             setNombre(data.cliente.nombre);
             setContacto(data.cliente.contacto ?? "");
             setTelefono(data.cliente.telefono ?? "");
@@ -209,11 +213,14 @@ export function FormularioCliente({ onClienteCreado }: Props) {
           <select
             className="input-app"
             value={tipoPersona}
-            onChange={(e) => setTipoPersona(e.target.value as TipoPersona)}
+            onChange={(e) => setTipoPersona(e.target.value as TipoPersonaCliente)}
             disabled={altaBloqueadaPorCi}
           >
-            <option value="FISICA">Persona fisica</option>
-            <option value="JURIDICA">Persona juridica</option>
+            {TIPOS_PERSONA_CLIENTE.map((t) => (
+              <option key={t} value={t}>
+                {ETIQUETA_TIPO_PERSONA_CLIENTE[t]}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -228,11 +235,11 @@ export function FormularioCliente({ onClienteCreado }: Props) {
               huboAutocompletadoRef.current = false;
             }}
           >
-            <option value="CI">CI (Uruguay)</option>
-            <option value="RUT">RUT</option>
-            <option value="DNI">DNI</option>
-            <option value="PASAPORTE">Pasaporte</option>
-            <option value="OTROS">OTROS</option>
+            {TIPOS_DOCUMENTO_CLIENTE.map((t) => (
+              <option key={t} value={t}>
+                {ETIQUETA_TIPO_DOCUMENTO_CLIENTE[t]}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -269,7 +276,8 @@ export function FormularioCliente({ onClienteCreado }: Props) {
             {ciExistente.tipoDocumento !== "CI" ? (
               <>
                 {" "}
-                — en el sistema figura como <strong>{ciExistente.tipoDocumento}</strong>
+                — en el sistema figura como{" "}
+                <strong>{etiquetaTipoDocumentoCliente(ciExistente.tipoDocumento)}</strong>
               </>
             ) : null}
             ). No se puede repetir el alta con el mismo numero.

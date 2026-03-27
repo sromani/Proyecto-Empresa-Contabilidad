@@ -6,3 +6,5 @@ src/generated/prisma/
 .env*.local
 *.log
 tsconfig.tsbuildinfo
+# Claves y certificados locales (no versionar)
+*.pem

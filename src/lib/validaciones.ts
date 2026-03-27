@@ -1,8 +1,42 @@
 const SOLO_DIGITOS = /\D/g;
 
 /** Valores alineados con enum Prisma `TipoDocumento`. */
-export const TIPOS_DOCUMENTO_CLIENTE = ["RUT", "CI", "DNI", "PASAPORTE", "OTROS"] as const;
+export const TIPOS_DOCUMENTO_CLIENTE = ["CI", "RUT", "DNI", "PASAPORTE", "OTROS"] as const;
 export type TipoDocumentoCliente = (typeof TIPOS_DOCUMENTO_CLIENTE)[number];
+
+/** Texto para selects y listados (no altera valores enviados a la API). */
+export const ETIQUETA_TIPO_DOCUMENTO_CLIENTE: Record<TipoDocumentoCliente, string> = {
+  RUT: "RUT",
+  CI: "CI (Uruguay)",
+  DNI: "DNI",
+  PASAPORTE: "Pasaporte",
+  OTROS: "Otros",
+};
+
+export function etiquetaTipoDocumentoCliente(codigo: string): string {
+  const u = codigo.toUpperCase();
+  if (esTipoDocumentoCliente(u)) {
+    return ETIQUETA_TIPO_DOCUMENTO_CLIENTE[u];
+  }
+  return codigo;
+}
+
+/** Valores alineados con enum Prisma `TipoPersona`. */
+export const TIPOS_PERSONA_CLIENTE = ["FISICA", "JURIDICA"] as const;
+export type TipoPersonaCliente = (typeof TIPOS_PERSONA_CLIENTE)[number];
+
+export const ETIQUETA_TIPO_PERSONA_CLIENTE: Record<TipoPersonaCliente, string> = {
+  FISICA: "Persona física",
+  JURIDICA: "Persona jurídica",
+};
+
+export function etiquetaTipoPersonaCliente(codigo: string): string {
+  const u = codigo.toUpperCase();
+  if ((TIPOS_PERSONA_CLIENTE as readonly string[]).includes(u)) {
+    return ETIQUETA_TIPO_PERSONA_CLIENTE[u as TipoPersonaCliente];
+  }
+  return codigo;
+}
 
 export function esTipoDocumentoCliente(v: string): v is TipoDocumentoCliente {
   return (TIPOS_DOCUMENTO_CLIENTE as readonly string[]).includes(v);
@@ -93,7 +127,7 @@ export function mensajeValidacionDocumentoCliente(
   if (tipoU === "PASAPORTE") {
     return esPasaporteValido(doc) ? null : "El pasaporte debe tener entre 5 y 20 letras o numeros.";
   }
-  return esOtroDocumentoValido(doc) ? null : "OTROS debe tener entre 3 y 40 caracteres.";
+  return esOtroDocumentoValido(doc) ? null : "En tipo Otros, el documento debe tener entre 3 y 40 caracteres.";
 }
 
 /** Normaliza nombre/razon social para evitar mezclas raras de mayus/minus. */

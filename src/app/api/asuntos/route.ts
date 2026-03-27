@@ -2,6 +2,7 @@ import { EstadoAsunto, GrupoProfesional, Prisma, TipoAsunto } from "@/generated/
 import { NextResponse } from "next/server";
 import { requiereApiSesion } from "@/lib/api-auth";
 import { registrarAuditoria } from "@/lib/auditoria";
+import { mensajeErrorValidacionEquipoAsunto } from "@/lib/asunto-equipo-validar";
 import { obtenerErrorConfiguracionDb } from "@/lib/api-db";
 import { prisma } from "@/lib/prisma";
 
@@ -176,25 +177,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const idsEquipo = [
-      profesionalACargoId,
-      colaboradorACargoId,
-      colaboradorACargo2Id,
-      contadorReferenteId,
-    ].filter((x): x is string => Boolean(x));
-    if (new Set(idsEquipo).size !== idsEquipo.length) {
-      return NextResponse.json(
-        {
-          error:
-            "No puede repetirse la misma persona en equipo a cargo, colaboradores o contador referente.",
-        },
-        { status: 400 },
-      );
-    }
-
-    const [totalSocios, socioReferenteRow, totalLegalACargo] = await Promise.all([
+    const [totalSocios, totalLegalACargo] = await Promise.all([
       prisma.socio.count(),
-      prisma.socio.findUnique({ where: { id: socioReferenteId }, select: { id: true } }),
       prisma.profesional.count({ where: { grupo: GrupoProfesional.LEGAL_A_CARGO } }),
     ]);
     if (totalSocios === 0) {
@@ -206,69 +190,25 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (!socioReferenteRow) {
-      return NextResponse.json(
-        { error: "El socio referente no existe o fue eliminado. Elegi uno valido en maestros." },
-        { status: 400 },
-      );
-    }
     if (totalLegalACargo === 0) {
       return NextResponse.json(
         {
           error:
-            "No hay profesionales a cargo (escribano o abogado) en maestros. Carga al menos uno en Socios y equipo antes de crear asuntos.",
+            "No hay profesionales a cargo (escribano o abogado) en maestros. Carga al menos uno en Socios y Equipo antes de crear asuntos.",
         },
         { status: 400 },
       );
     }
 
-    const idsCarga = [profesionalACargoId, colaboradorACargoId, colaboradorACargo2Id].filter(
-      Boolean,
-    ) as string[];
-    const filasEquipo = await prisma.profesional.findMany({
-      where: { id: { in: idsCarga } },
-      select: { id: true, grupo: true },
+    const errEquipo = await mensajeErrorValidacionEquipoAsunto(prisma, {
+      socioReferenteId,
+      profesionalACargoId,
+      colaboradorACargoId,
+      colaboradorACargo2Id,
+      contadorReferenteId,
     });
-    if (filasEquipo.length !== idsCarga.length) {
-      return NextResponse.json({ error: "Cliente, equipo o socio no existen." }, { status: 400 });
-    }
-    const principal = filasEquipo.find((r) => r.id === profesionalACargoId);
-    if (!principal || principal.grupo !== GrupoProfesional.LEGAL_A_CARGO) {
-      return NextResponse.json(
-        {
-          error:
-            "El equipo a cargo debe ser un profesional del departamento legal/notarial (escribano o abogado) cargado en maestros.",
-        },
-        { status: 400 },
-      );
-    }
-    for (const cid of [colaboradorACargoId, colaboradorACargo2Id]) {
-      if (!cid) continue;
-      const row = filasEquipo.find((r) => r.id === cid);
-      if (!row || row.grupo !== GrupoProfesional.LEGAL_COLABORADOR) {
-        return NextResponse.json(
-          {
-            error:
-              "Los colaboradores deben ser procurador, estudiante o administrativo segun maestros.",
-          },
-          { status: 400 },
-        );
-      }
-    }
-    if (contadorReferenteId) {
-      const cont = await prisma.profesional.findUnique({
-        where: { id: contadorReferenteId },
-        select: { grupo: true },
-      });
-      if (!cont || cont.grupo !== GrupoProfesional.CONTADOR) {
-        return NextResponse.json(
-          {
-            error:
-              "El contador referente debe ser un miembro del equipo dado de alta como contador (maestros).",
-          },
-          { status: 400 },
-        );
-      }
+    if (errEquipo) {
+      return NextResponse.json({ error: errEquipo }, { status: 400 });
     }
 
     const asunto = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

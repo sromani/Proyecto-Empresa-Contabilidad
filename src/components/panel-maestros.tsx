@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type GrupoCatalogo,
   type PuestoCatalogo,
@@ -38,6 +38,28 @@ type FilaLista = {
   profesion: string;
   funcion: string;
 };
+
+type CampoReasignacionMasiva =
+  | "profesionalACargoId"
+  | "colaboradorACargoId"
+  | "colaboradorACargo2Id"
+  | "contadorReferenteId"
+  | "socioReferenteId";
+
+const LABEL_CAMPO_REA: Record<CampoReasignacionMasiva, string> = {
+  profesionalACargoId: "Equipo a cargo (escribano / abogado)",
+  colaboradorACargoId: "Colaborador 1",
+  colaboradorACargo2Id: "Colaborador 2",
+  contadorReferenteId: "Contador referente",
+  socioReferenteId: "Socio referente",
+};
+
+const ORDEN_CAMPO_REA_PROF: CampoReasignacionMasiva[] = [
+  "profesionalACargoId",
+  "colaboradorACargoId",
+  "colaboradorACargo2Id",
+  "contadorReferenteId",
+];
 
 /** Subcadena en nombre, sin distinguir mayúsculas ni tildes. */
 function nombreCoincideBusqueda(nombre: string, consulta: string): boolean {
@@ -81,6 +103,14 @@ export function PanelMaestros() {
   const [eliminar, setEliminar] = useState<EliminarPendiente | null>(null);
   const [eliminando, setEliminando] = useState(false);
   const [msgEliminar, setMsgEliminar] = useState("");
+  const [pendientesMiembro, setPendientesMiembro] = useState<{
+    total: number;
+    porRol: Partial<Record<CampoReasignacionMasiva, number>>;
+  } | null>(null);
+  const [cargandoPendientes, setCargandoPendientes] = useState(false);
+
+  const reasignacionMasivaRef = useRef<HTMLDivElement>(null);
+  const omitirResetReaDesdeRef = useRef(false);
 
   const [editSocio, setEditSocio] = useState<SocioRow | null>(null);
   const [editSocNombre, setEditSocNombre] = useState("");
@@ -98,6 +128,15 @@ export function PanelMaestros() {
   const [msgEditProf, setMsgEditProf] = useState("");
 
   const [busquedaLista, setBusquedaLista] = useState("");
+
+  const [reaCampo, setReaCampo] = useState<CampoReasignacionMasiva>("profesionalACargoId");
+  const [reaDesdeId, setReaDesdeId] = useState("");
+  const [reaHaciaId, setReaHaciaId] = useState("");
+  const [reaDescMas, setReaDescMas] = useState(
+    "Reasignacion masiva: baja o cambio en el departamento.",
+  );
+  const [reaMsgMas, setReaMsgMas] = useState("");
+  const [reaEjecutando, setReaEjecutando] = useState(false);
 
   const cargar = useCallback(async () => {
     setErrorLista("");
@@ -128,6 +167,42 @@ export function PanelMaestros() {
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  useEffect(() => {
+    if (!eliminar) {
+      setPendientesMiembro(null);
+      setCargandoPendientes(false);
+      return;
+    }
+    const ac = new AbortController();
+    setCargandoPendientes(true);
+    setPendientesMiembro(null);
+    const q =
+      eliminar.kind === "socio"
+        ? `socioId=${encodeURIComponent(eliminar.id)}`
+        : `profesionalId=${encodeURIComponent(eliminar.id)}`;
+    void fetch(`/api/maestros/asuntos-pendientes-miembro?${q}`, { signal: ac.signal })
+      .then(async (r) => {
+        const data = (await r.json().catch(() => ({}))) as {
+          total?: number;
+          porRol?: Partial<Record<CampoReasignacionMasiva, number>>;
+        };
+        if (!r.ok || typeof data.total !== "number" || !data.porRol) {
+          if (!ac.signal.aborted) setPendientesMiembro(null);
+          return;
+        }
+        if (!ac.signal.aborted) {
+          setPendientesMiembro({ total: data.total, porRol: data.porRol });
+        }
+      })
+      .catch(() => {
+        if (!ac.signal.aborted) setPendientesMiembro(null);
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setCargandoPendientes(false);
+      });
+    return () => ac.abort();
+  }, [eliminar?.id, eliminar?.kind]);
 
   const legalACargoCount = useMemo(
     () => profesionales.filter((p) => p.grupo === "LEGAL_A_CARGO").length,
@@ -164,6 +239,99 @@ export function PanelMaestros() {
     () => filasLista.filter((row) => nombreCoincideBusqueda(row.nombre, busquedaLista)),
     [filasLista, busquedaLista],
   );
+
+  const opcionesDesdeRea = useMemo(() => {
+    if (reaCampo === "socioReferenteId") {
+      return socios.map((s) => ({ id: s.id, nombre: s.nombre }));
+    }
+    if (reaCampo === "profesionalACargoId") {
+      return profesionales
+        .filter((p) => p.grupo === "LEGAL_A_CARGO")
+        .map((p) => ({ id: p.id, nombre: `${p.nombre} (${ETIQUETA_PUESTO[p.puesto]})` }));
+    }
+    if (reaCampo === "contadorReferenteId") {
+      return profesionales.filter((p) => p.grupo === "CONTADOR").map((p) => ({ id: p.id, nombre: p.nombre }));
+    }
+    return profesionales
+      .filter((p) => p.grupo === "LEGAL_COLABORADOR")
+      .map((p) => ({ id: p.id, nombre: p.nombre }));
+  }, [reaCampo, socios, profesionales]);
+
+  const opcionesHaciaRea = useMemo(
+    () => opcionesDesdeRea.filter((o) => o.id !== reaDesdeId),
+    [opcionesDesdeRea, reaDesdeId],
+  );
+
+  useEffect(() => {
+    if (omitirResetReaDesdeRef.current) {
+      omitirResetReaDesdeRef.current = false;
+      return;
+    }
+    setReaDesdeId("");
+    setReaHaciaId("");
+  }, [reaCampo]);
+
+  function irAReasignacionDesdeEliminar() {
+    if (!eliminar) return;
+    const miembroId = eliminar.id;
+    const porRol = pendientesMiembro?.porRol ?? {};
+    const campo: CampoReasignacionMasiva =
+      eliminar.kind === "socio"
+        ? "socioReferenteId"
+        : (ORDEN_CAMPO_REA_PROF.find((c) => (porRol[c] ?? 0) > 0) ?? "profesionalACargoId");
+    setMsgEliminar("");
+    setEliminar(null);
+    setReaHaciaId("");
+    setReaCampo((prev) => {
+      if (prev !== campo) {
+        omitirResetReaDesdeRef.current = true;
+      }
+      return campo;
+    });
+    setReaDesdeId(miembroId);
+    requestAnimationFrame(() => {
+      reasignacionMasivaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  async function ejecutarReasignacionMasiva() {
+    setReaMsgMas("");
+    if (!reaDesdeId || !reaHaciaId) {
+      setReaMsgMas("Elegí quién deja el rol y el reemplazo.");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Se actualizarán todos los asuntos EN TRAMITE donde esa persona figure en el rol elegido. ¿Continuar?",
+      )
+    ) {
+      return;
+    }
+    setReaEjecutando(true);
+    try {
+      const response = await fetch("/api/asuntos/reasignacion-masiva", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campo: reaCampo,
+          desdeId: reaDesdeId,
+          haciaId: reaHaciaId,
+          descripcionSeguimiento: reaDescMas.trim() || undefined,
+        }),
+      });
+      const data = (await response.json()) as { error?: string; actualizados?: number; mensaje?: string };
+      if (!response.ok) {
+        setReaMsgMas(data.error ?? "No se pudo reasignar.");
+        return;
+      }
+      setReaMsgMas(data.mensaje ?? `Listo: ${data.actualizados ?? 0} asunto(s).`);
+      setReaHaciaId("");
+    } catch {
+      setReaMsgMas("Error de red.");
+    } finally {
+      setReaEjecutando(false);
+    }
+  }
 
   function abrirEditarSocio(s: SocioRow) {
     setEditSocio(s);
@@ -257,6 +425,12 @@ export function PanelMaestros() {
 
   async function ejecutarEliminar() {
     if (!eliminar || eliminar.paso !== 2) return;
+    if (pendientesMiembro && pendientesMiembro.total > 0) {
+      setMsgEliminar(
+        "Hay asuntos en trámite con esta persona. Usá la reasignación masiva antes de eliminar.",
+      );
+      return;
+    }
     setEliminando(true);
     setMsgEliminar("");
     const path =
@@ -358,7 +532,7 @@ export function PanelMaestros() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {errorLista ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {errorLista}
@@ -367,7 +541,7 @@ export function PanelMaestros() {
 
       {eliminar ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex min-h-0 items-center justify-center bg-black/40 p-3 sm:p-4"
           role="presentation"
           onClick={() => {
             if (!eliminando) setEliminar(null);
@@ -377,7 +551,7 @@ export function PanelMaestros() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="eliminar-titulo"
-            className="max-w-md rounded-xl border border-blue-200 bg-white p-5 shadow-xl"
+            className="max-h-[85dvh] w-full max-w-md overflow-y-auto overflow-x-hidden rounded-xl border border-blue-200 bg-white p-4 shadow-xl sm:max-h-[90dvh] sm:p-5"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -394,6 +568,24 @@ export function PanelMaestros() {
                 <span className="font-semibold text-blue-950">{eliminar.etiqueta}</span>.
               </p>
             )}
+            {eliminar.paso === 1 && cargandoPendientes ? (
+              <p className="mt-2 text-sm text-blue-800/80">Comprobando asuntos en trámite…</p>
+            ) : null}
+            {eliminar.paso === 1 &&
+            !cargandoPendientes &&
+            pendientesMiembro &&
+            pendientesMiembro.total > 0 ? (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                <p className="font-medium">
+                  {pendientesMiembro.total === 1
+                    ? "Hay 1 asunto en trámite que referencia a esta persona."
+                    : `Hay ${pendientesMiembro.total} asuntos en trámite que referencian a esta persona.`}
+                </p>
+                <p className="mt-1 text-amber-950/90">
+                  Reasignalos en bloque desde la sección inferior antes de eliminar el registro.
+                </p>
+              </div>
+            ) : null}
             {msgEliminar ? <p className="mt-2 text-sm text-red-700">{msgEliminar}</p> : null}
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
@@ -410,22 +602,35 @@ export function PanelMaestros() {
                 Cancelar
               </button>
               {eliminar.paso === 1 ? (
-                <button
-                  type="button"
-                  className={btnPeligro}
-                  disabled={eliminando}
-                  onClick={() => {
-                    setMsgEliminar("");
-                    setEliminar({ ...eliminar, paso: 2 });
-                  }}
-                >
-                  Sí, deseo eliminar
-                </button>
+                cargandoPendientes ? null : pendientesMiembro && pendientesMiembro.total > 0 ? (
+                  <button
+                    type="button"
+                    className="rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-xs font-medium text-amber-950 transition-colors hover:bg-amber-200"
+                    disabled={eliminando}
+                    onClick={() => irAReasignacionDesdeEliminar()}
+                  >
+                    Ir a reasignación masiva
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={btnPeligro}
+                    disabled={eliminando}
+                    onClick={() => {
+                      setMsgEliminar("");
+                      setEliminar({ ...eliminar, paso: 2 });
+                    }}
+                  >
+                    Sí, deseo eliminar
+                  </button>
+                )
               ) : (
                 <button
                   type="button"
                   className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800 disabled:opacity-60"
-                  disabled={eliminando}
+                  disabled={
+                    eliminando || (!!pendientesMiembro && pendientesMiembro.total > 0)
+                  }
                   onClick={() => void ejecutarEliminar()}
                 >
                   {eliminando ? "Eliminando…" : "Eliminar definitivamente"}
@@ -438,7 +643,7 @@ export function PanelMaestros() {
 
       {editSocio ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex min-h-0 items-center justify-center bg-black/40 p-3 sm:p-4"
           role="presentation"
           onClick={() => {
             if (!guardEditSocio) setEditSocio(null);
@@ -447,7 +652,7 @@ export function PanelMaestros() {
           <div
             role="dialog"
             aria-modal="true"
-            className="w-full max-w-md rounded-xl border border-blue-200 bg-white p-5 shadow-xl"
+            className="max-h-[85dvh] w-full max-w-md overflow-y-auto overflow-x-hidden rounded-xl border border-blue-200 bg-white p-4 shadow-xl sm:max-h-[90dvh] sm:p-5"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -507,7 +712,7 @@ export function PanelMaestros() {
 
       {editProf ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex min-h-0 items-center justify-center bg-black/40 p-3 sm:p-4"
           role="presentation"
           onClick={() => {
             if (!guardEditProf) setEditProf(null);
@@ -516,7 +721,7 @@ export function PanelMaestros() {
           <div
             role="dialog"
             aria-modal="true"
-            className="w-full max-w-lg rounded-xl border border-blue-200 bg-white p-5 shadow-xl"
+            className="max-h-[85dvh] w-full max-w-lg overflow-y-auto overflow-x-hidden rounded-xl border border-blue-200 bg-white p-4 shadow-xl sm:max-h-[90dvh] sm:p-5"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -593,10 +798,10 @@ export function PanelMaestros() {
         </div>
       ) : null}
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
+      <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+        <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-4 shadow-sm shadow-blue-950/5 sm:p-5">
           <div>
-            <h2 className="text-lg font-semibold text-blue-950">Alta de socio</h2>
+            <h2 className="text-lg font-semibold text-blue-950">Alta de Socio</h2>
             <p className="mt-1 text-sm text-blue-800/75">
               Nombre obligatorio. Rol fijo: <strong>Socio</strong>. Profesión y función son opcionales.
             </p>
@@ -655,9 +860,9 @@ export function PanelMaestros() {
           </form>
         </div>
 
-        <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
+        <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-4 shadow-sm shadow-blue-950/5 sm:p-5">
           <div>
-            <h2 className="text-lg font-semibold text-blue-950">Alta de equipo</h2>
+            <h2 className="text-lg font-semibold text-blue-950">Alta de Equipo</h2>
             <p className="mt-1 text-sm text-blue-800/75">
               Nombre y rol obligatorios. El rol define el área (dirección, legal, colaborador, contador).
               Profesión opcional. Función obligatoria salvo director/gerente.
@@ -740,12 +945,12 @@ export function PanelMaestros() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
+      <div className="rounded-xl border border-blue-200/80 bg-white p-4 shadow-sm shadow-blue-950/5 sm:p-5">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold text-blue-950">Listado unificado</h2>
             <p className="mt-1 text-sm text-blue-800/75">
-              Socios y equipo en un solo listado. Para nuevos asuntos hace falta al menos un socio y un
+              Socios y Equipo en un solo listado. Para nuevos asuntos hace falta al menos un socio y un
               profesional a cargo (escribano o abogado).
             </p>
             {!cargando && legalACargoCount === 0 ? (
@@ -866,6 +1071,87 @@ export function PanelMaestros() {
             </table>
           </div>
         )}
+      </div>
+
+      <div
+        ref={reasignacionMasivaRef}
+        id="reasignacion-asuntos-en-tramite"
+        className="scroll-mt-4 rounded-xl border border-amber-200/90 bg-amber-50/50 p-4 shadow-sm shadow-amber-900/5 sm:p-5"
+      >
+        <h2 className="text-lg font-semibold text-amber-950">Reasignar asuntos EN TRAMITE (baja del departamento)</h2>
+        <p className="mt-1 text-sm text-amber-950/85">
+          Reemplaza en bloque a la persona que deja el estudio en un rol concreto. Solo afecta asuntos{" "}
+          <strong>en trámite</strong>. Cada asunto recibe una línea en el historial.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-amber-950/90">Rol en el asunto a reemplazar</span>
+            <select
+              className={inputClass}
+              value={reaCampo}
+              onChange={(e) => setReaCampo(e.target.value as CampoReasignacionMasiva)}
+            >
+              {(Object.keys(LABEL_CAMPO_REA) as CampoReasignacionMasiva[]).map((c) => (
+                <option key={c} value={c}>
+                  {LABEL_CAMPO_REA[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-amber-950/90">Persona que deja / a reemplazar</span>
+            <select
+              className={inputClass}
+              value={reaDesdeId}
+              onChange={(e) => setReaDesdeId(e.target.value)}
+            >
+              <option value="">— Elegir —</option>
+              {opcionesDesdeRea.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-amber-950/90">Nueva asignación</span>
+            <select
+              className={inputClass}
+              value={reaHaciaId}
+              onChange={(e) => setReaHaciaId(e.target.value)}
+            >
+              <option value="">— Elegir —</option>
+              {opcionesHaciaRea.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 md:col-span-2 lg:col-span-3">
+            <span className="text-xs font-medium text-amber-950/90">Texto en historial de cada asunto</span>
+            <input
+              className={inputClass}
+              value={reaDescMas}
+              onChange={(e) => setReaDescMas(e.target.value)}
+            />
+          </label>
+        </div>
+        {reaMsgMas ? (
+          <p
+            className={`mt-3 text-sm ${reaMsgMas.includes("Listo") || reaMsgMas.includes("actualizaron") || reaMsgMas.includes("No hay") ? "text-emerald-800" : "text-red-800"}`}
+          >
+            {reaMsgMas}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="mt-4 w-full rounded-lg bg-amber-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-900 disabled:opacity-60 sm:w-auto"
+          disabled={reaEjecutando || !reaDesdeId || !reaHaciaId}
+          onClick={() => void ejecutarReasignacionMasiva()}
+        >
+          {reaEjecutando ? "Procesando…" : "Reasignar asuntos en trámite"}
+        </button>
       </div>
     </div>
   );
