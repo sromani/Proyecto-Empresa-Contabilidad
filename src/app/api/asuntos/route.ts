@@ -1,4 +1,4 @@
-import { EstadoAsunto, Prisma, TipoAsunto } from "@/generated/prisma";
+import { EstadoAsunto, GrupoProfesional, Prisma, TipoAsunto } from "@/generated/prisma";
 import { NextResponse } from "next/server";
 import { requiereApiSesion } from "@/lib/api-auth";
 import { registrarAuditoria } from "@/lib/auditoria";
@@ -150,6 +150,7 @@ export async function POST(request: Request) {
     const asuntoNombre = String(body?.asuntoNombre ?? "").trim();
     const profesionalACargoId = String(body?.profesionalACargoId ?? "");
     const colaboradorACargoId = String(body?.colaboradorACargoId ?? "").trim() || null;
+    const colaboradorACargo2Id = String(body?.colaboradorACargo2Id ?? "").trim() || null;
     const contadorReferenteId = String(body?.contadorReferenteId ?? "").trim() || null;
     const socioReferenteId = String(body?.socioReferenteId ?? "");
     const descripcionLibre = String(body?.descripcion ?? "").trim() || null;
@@ -165,7 +166,7 @@ export async function POST(request: Request) {
     }
 
     if (!profesionalACargoId) {
-      return NextResponse.json({ error: "Debes indicar el profesional a cargo." }, { status: 400 });
+      return NextResponse.json({ error: "Debés indicar el equipo a cargo." }, { status: 400 });
     }
 
     if (fechaAlerta && fechaAlerta < fechaInicio) {
@@ -173,6 +174,101 @@ export async function POST(request: Request) {
         { error: "La alerta de vencimiento no puede ser anterior a la fecha de inicio." },
         { status: 400 },
       );
+    }
+
+    const idsEquipo = [
+      profesionalACargoId,
+      colaboradorACargoId,
+      colaboradorACargo2Id,
+      contadorReferenteId,
+    ].filter((x): x is string => Boolean(x));
+    if (new Set(idsEquipo).size !== idsEquipo.length) {
+      return NextResponse.json(
+        {
+          error:
+            "No puede repetirse la misma persona en equipo a cargo, colaboradores o contador referente.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const [totalSocios, socioReferenteRow, totalLegalACargo] = await Promise.all([
+      prisma.socio.count(),
+      prisma.socio.findUnique({ where: { id: socioReferenteId }, select: { id: true } }),
+      prisma.profesional.count({ where: { grupo: GrupoProfesional.LEGAL_A_CARGO } }),
+    ]);
+    if (totalSocios === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No hay socios cargados en maestros. Debe existir al menos un socio antes de crear asuntos.",
+        },
+        { status: 400 },
+      );
+    }
+    if (!socioReferenteRow) {
+      return NextResponse.json(
+        { error: "El socio referente no existe o fue eliminado. Elegi uno valido en maestros." },
+        { status: 400 },
+      );
+    }
+    if (totalLegalACargo === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No hay profesionales a cargo (escribano o abogado) en maestros. Carga al menos uno en Socios y equipo antes de crear asuntos.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const idsCarga = [profesionalACargoId, colaboradorACargoId, colaboradorACargo2Id].filter(
+      Boolean,
+    ) as string[];
+    const filasEquipo = await prisma.profesional.findMany({
+      where: { id: { in: idsCarga } },
+      select: { id: true, grupo: true },
+    });
+    if (filasEquipo.length !== idsCarga.length) {
+      return NextResponse.json({ error: "Cliente, equipo o socio no existen." }, { status: 400 });
+    }
+    const principal = filasEquipo.find((r) => r.id === profesionalACargoId);
+    if (!principal || principal.grupo !== GrupoProfesional.LEGAL_A_CARGO) {
+      return NextResponse.json(
+        {
+          error:
+            "El equipo a cargo debe ser un profesional del departamento legal/notarial (escribano o abogado) cargado en maestros.",
+        },
+        { status: 400 },
+      );
+    }
+    for (const cid of [colaboradorACargoId, colaboradorACargo2Id]) {
+      if (!cid) continue;
+      const row = filasEquipo.find((r) => r.id === cid);
+      if (!row || row.grupo !== GrupoProfesional.LEGAL_COLABORADOR) {
+        return NextResponse.json(
+          {
+            error:
+              "Los colaboradores deben ser procurador, estudiante o administrativo segun maestros.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+    if (contadorReferenteId) {
+      const cont = await prisma.profesional.findUnique({
+        where: { id: contadorReferenteId },
+        select: { grupo: true },
+      });
+      if (!cont || cont.grupo !== GrupoProfesional.CONTADOR) {
+        return NextResponse.json(
+          {
+            error:
+              "El contador referente debe ser un miembro del equipo dado de alta como contador (maestros).",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const asunto = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -191,6 +287,7 @@ export async function POST(request: Request) {
           socioReferenteId,
           profesionalACargoId,
           colaboradorACargoId,
+          colaboradorACargo2Id,
           contadorReferenteId,
           estado: EstadoAsunto.EN_TRAMITE,
           fechaInicio,
@@ -200,8 +297,9 @@ export async function POST(request: Request) {
           cliente: { select: { id: true, nombre: true } },
           catalogo: true,
           socioReferente: { select: { id: true, nombre: true } },
-          profesionalACargo: { select: { id: true, nombre: true, rol: true } },
+          profesionalACargo: { select: { id: true, nombre: true, grupo: true, puesto: true } },
           colaboradorACargo: { select: { id: true, nombre: true } },
+          colaboradorACargo2: { select: { id: true, nombre: true } },
           contadorReferente: { select: { id: true, nombre: true } },
           seguimientos: { orderBy: { fecha: "desc" }, take: 1 },
         },
@@ -220,8 +318,9 @@ export async function POST(request: Request) {
           cliente: { select: { id: true, nombre: true } },
           catalogo: true,
           socioReferente: { select: { id: true, nombre: true } },
-          profesionalACargo: { select: { id: true, nombre: true, rol: true } },
+          profesionalACargo: { select: { id: true, nombre: true, grupo: true, puesto: true } },
           colaboradorACargo: { select: { id: true, nombre: true } },
+          colaboradorACargo2: { select: { id: true, nombre: true } },
           contadorReferente: { select: { id: true, nombre: true } },
           seguimientos: { orderBy: { fecha: "desc" } },
         },
@@ -245,7 +344,7 @@ export async function POST(request: Request) {
       (error as { code?: string }).code === "P2003"
     ) {
       return NextResponse.json(
-        { error: "Cliente, profesionales o socio no existen." },
+        { error: "Cliente, equipo o socio no existen." },
         { status: 400 },
       );
     }

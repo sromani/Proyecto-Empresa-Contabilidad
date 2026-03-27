@@ -28,11 +28,23 @@ enum TipoAsunto {
   LEGAL
 }
 
-enum RolProfesional {
-  SOCIO
+/// Bloque en maestros: dirección / legal a cargo / colaboradores / contadores
+enum GrupoProfesional {
+  DIRECCION
+  LEGAL_A_CARGO
+  LEGAL_COLABORADOR
+  CONTADOR
+}
+
+/// Cargo concreto dentro del grupo
+enum PuestoProfesional {
+  DIRECTOR
+  GERENTE
   ESCRIBANO
   ABOGADO
   PROCURADOR
+  ESTUDIANTE
+  ADMINISTRATIVO
   CONTADOR
 }
 
@@ -88,24 +100,29 @@ model AsuntoCatalogo {
 }
 
 model Profesional {
-  id                      String    @id @default(cuid())
+  id                      String            @id @default(cuid())
   nombre                  String
-  profesion               String
+  /// Texto libre histórico; en formularios nuevos puede quedar vacío
+  profesion               String            @default("")
   funcion                 String
-  rol                     RolProfesional
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  grupo                   GrupoProfesional
+  puesto                  PuestoProfesional
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
   asuntosComoPrincipal    Asunto[]  @relation("AsuntoProfesionalACargo")
   asuntosComoColaborador  Asunto[]  @relation("AsuntoColaborador")
+  asuntosComoColaborador2 Asunto[]  @relation("AsuntoColaborador2")
   asuntosComoContador     Asunto[]  @relation("AsuntoContador")
 }
 
 model Socio {
-  id        String   @id @default(cuid())
-  nombre    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  asuntos   Asunto[]
+  id         String   @id @default(cuid())
+  nombre     String
+  profesion  String   @default("")
+  funcion    String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  asuntos    Asunto[]
 }
 
 model Asunto {
@@ -118,6 +135,7 @@ model Asunto {
   socioReferenteId       String
   profesionalACargoId    String
   colaboradorACargoId    String?
+  colaboradorACargo2Id   String?
   contadorReferenteId    String?
   estado                 EstadoAsunto  @default(EN_TRAMITE)
   fechaInicio            DateTime      @default(now())
@@ -133,6 +151,7 @@ model Asunto {
   socioReferente     Socio          @relation(fields: [socioReferenteId], references: [id])
   profesionalACargo  Profesional    @relation("AsuntoProfesionalACargo", fields: [profesionalACargoId], references: [id])
   colaboradorACargo  Profesional?   @relation("AsuntoColaborador", fields: [colaboradorACargoId], references: [id])
+  colaboradorACargo2 Profesional?   @relation("AsuntoColaborador2", fields: [colaboradorACargo2Id], references: [id])
   contadorReferente  Profesional?   @relation("AsuntoContador", fields: [contadorReferenteId], references: [id])
   seguimientos       Seguimiento[]
 }

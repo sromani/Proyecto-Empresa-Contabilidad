@@ -4,6 +4,7 @@ import { requiereApiSesion } from "@/lib/api-auth";
 import { registrarAuditoria } from "@/lib/auditoria";
 import {
   esPrismaValidacion,
+  mensajeErrorApiDbAcceso,
   mensajeErrorDesarrollo,
   mensajeErrorPrismaParaUsuario,
   obtenerErrorConfiguracionDb,
@@ -46,11 +47,8 @@ export async function GET(request: Request) {
       take: 500,
     });
     return NextResponse.json(clientes);
-  } catch {
-    return NextResponse.json(
-      { error: "No se pudo conectar a PostgreSQL. Revisa DATABASE_URL y el servidor de base." },
-      { status: 503 },
-    );
+  } catch (e) {
+    return NextResponse.json({ error: mensajeErrorApiDbAcceso(e) }, { status: 503 });
   }
 }
 
@@ -137,10 +135,11 @@ export async function POST(request: Request) {
       "code" in error &&
       (error as { code?: string }).code === "P2002"
     ) {
+      const tipoDocDuplicado = String(body?.tipoDocumento ?? "").toUpperCase();
       return NextResponse.json(
         {
           error:
-            tipoDocumentoRaw === "CI"
+            tipoDocDuplicado === "CI"
               ? "Esta CI ya esta registrada. No se puede crear el mismo cliente de nuevo."
               : "Ya existe un cliente con ese documento.",
         },

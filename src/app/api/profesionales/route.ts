@@ -1,21 +1,15 @@
-import { RolProfesional } from "@/generated/prisma";
 import { NextResponse } from "next/server";
 import { requiereApiMaestrosEstudio } from "@/lib/api-auth";
 import {
   esPrismaValidacion,
+  mensajeErrorApiDbAcceso,
   mensajeErrorDesarrollo,
   mensajeErrorPrismaParaUsuario,
   obtenerErrorConfiguracionDb,
 } from "@/lib/api-db";
 import { registrarAuditoria } from "@/lib/auditoria";
 import { prisma } from "@/lib/prisma";
-
-const ROLES_PROFESIONAL = new Set<string>(Object.values(RolProfesional));
-
-function parseRolProfesional(raw: string): RolProfesional | null {
-  const u = raw.trim().toUpperCase();
-  return ROLES_PROFESIONAL.has(u) ? (u as RolProfesional) : null;
-}
+import { requiereFuncionEnEstudio, resolverGrupoPuestoDesdeBody } from "@/lib/profesional-equipo";
 
 export async function GET() {
   const auth = await requiereApiMaestrosEstudio();
@@ -36,16 +30,14 @@ export async function GET() {
         nombre: true,
         profesion: true,
         funcion: true,
-        rol: true,
+        grupo: true,
+        puesto: true,
         createdAt: true,
       },
     });
     return NextResponse.json(profesionales);
-  } catch {
-    return NextResponse.json(
-      { error: "No se pudo conectar a PostgreSQL. Revisa DATABASE_URL y el servidor de base." },
-      { status: 503 },
-    );
+  } catch (e) {
+    return NextResponse.json({ error: mensajeErrorApiDbAcceso(e) }, { status: 503 });
   }
 }
 
@@ -70,23 +62,21 @@ export async function POST(request: Request) {
   const nombre = String(body?.nombre ?? "").trim();
   const profesion = String(body?.profesion ?? "").trim();
   const funcion = String(body?.funcion ?? "").trim();
-  const rol = parseRolProfesional(String(body?.rol ?? ""));
+  const resuelto = resolverGrupoPuestoDesdeBody(body);
 
   if (!nombre) {
     return NextResponse.json({ error: "El nombre es obligatorio." }, { status: 400 });
   }
-  if (!profesion) {
-    return NextResponse.json({ error: "La profesion es obligatoria." }, { status: 400 });
-  }
-  if (!funcion) {
-    return NextResponse.json({ error: "La funcion es obligatoria." }, { status: 400 });
-  }
-  if (!rol) {
+  if (!resuelto) {
     return NextResponse.json(
-      {
-        error:
-          "Rol invalido. Use uno de: SOCIO, ESCRIBANO, ABOGADO, PROCURADOR, CONTADOR.",
-      },
+      { error: "Indica el rol del miembro (ej. director, escribano, abogado) o grupo y puesto validos." },
+      { status: 400 },
+    );
+  }
+  const { grupo, puesto } = resuelto;
+  if (requiereFuncionEnEstudio(grupo) && !funcion) {
+    return NextResponse.json(
+      { error: "La funcion en el estudio es obligatoria para este tipo de miembro." },
       { status: 400 },
     );
   }
@@ -98,7 +88,13 @@ export async function POST(request: Request) {
 
   try {
     const profesional = await prisma.profesional.create({
-      data: { nombre, profesion, funcion, rol },
+      data: {
+        nombre,
+        profesion,
+        funcion,
+        grupo,
+        puesto,
+      },
     });
 
     await registrarAuditoria({
@@ -106,7 +102,7 @@ export async function POST(request: Request) {
       accion: "PROFESIONAL_CREAR",
       entidad: "Profesional",
       entidadId: profesional.id,
-      detalle: { nombre: profesional.nombre, rol: profesional.rol },
+      detalle: { nombre: profesional.nombre, grupo: profesional.grupo, puesto: profesional.puesto },
     });
 
     return NextResponse.json(profesional, { status: 201 });
@@ -125,7 +121,7 @@ export async function POST(request: Request) {
         error:
           detalle ??
           extraDev ??
-          "No se pudo crear el profesional. Revisa la terminal del servidor (mensaje [api/profesionales POST]).",
+          "No se pudo dar de alta al miembro del equipo. Revisa la terminal del servidor (mensaje [api/profesionales POST]).",
       },
       { status: 503 },
     );

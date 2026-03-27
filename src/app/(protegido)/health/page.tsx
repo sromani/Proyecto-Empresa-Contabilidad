@@ -1,3 +1,4 @@
+import { mensajeErrorApiDbAcceso } from "@/lib/api-db";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +25,13 @@ async function obtenerEstadoSistema() {
       database: "ok",
       detalle: "Conexion con PostgreSQL activa",
     };
-  } catch {
+  } catch (e) {
     return {
       statusCode: 503,
       ok: false,
       app: "ok",
       database: "error",
-      detalle: "No se pudo conectar a PostgreSQL",
+      detalle: mensajeErrorApiDbAcceso(e),
     };
   }
 }

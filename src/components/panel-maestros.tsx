@@ -1,23 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type GrupoCatalogo,
+  type PuestoCatalogo,
+  ETIQUETA_GRUPO,
+  ETIQUETA_PUESTO,
+  PUESTOS_EQUIPO_ORDEN,
+  grupoDesdePuesto,
+  puestoRequiereFuncionEnEstudio,
+} from "@/lib/profesional-equipo-catalogo";
 
-type SocioRow = { id: string; nombre: string };
+type SocioRow = { id: string; nombre: string; profesion: string; funcion: string };
 type ProfesionalRow = {
   id: string;
   nombre: string;
   profesion: string;
   funcion: string;
-  rol: string;
+  grupo: GrupoCatalogo;
+  puesto: PuestoCatalogo;
 };
-
-const ROLES_SELECT: { value: string; label: string }[] = [
-  { value: "SOCIO", label: "Socio" },
-  { value: "ESCRIBANO", label: "Escribano" },
-  { value: "ABOGADO", label: "Abogado" },
-  { value: "PROCURADOR", label: "Procurador" },
-  { value: "CONTADOR", label: "Contador" },
-];
 
 type EliminarPendiente = {
   kind: "socio" | "profesional";
@@ -26,10 +28,36 @@ type EliminarPendiente = {
   paso: 1 | 2;
 };
 
+type FilaLista = {
+  key: string;
+  tipo: "socio" | "equipo";
+  id: string;
+  nombre: string;
+  rolEtiqueta: string;
+  areaEtiqueta: string;
+  profesion: string;
+  funcion: string;
+};
+
+/** Subcadena en nombre, sin distinguir mayúsculas ni tildes. */
+function nombreCoincideBusqueda(nombre: string, consulta: string): boolean {
+  const q = consulta.trim();
+  if (!q) return true;
+  const norm = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase();
+  return norm(nombre).includes(norm(q));
+}
+
 const btnSec =
   "rounded-md border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-900 transition-colors hover:bg-blue-50";
 const btnPeligro =
   "rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800 transition-colors hover:bg-red-100";
+
+const inputClass =
+  "w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2";
 
 export function PanelMaestros() {
   const [socios, setSocios] = useState<SocioRow[]>([]);
@@ -37,33 +65,39 @@ export function PanelMaestros() {
   const [cargando, setCargando] = useState(true);
   const [errorLista, setErrorLista] = useState("");
 
-  const [nombreSocio, setNombreSocio] = useState("");
-  const [msgSocio, setMsgSocio] = useState("");
-  const [guardandoSocio, setGuardandoSocio] = useState(false);
+  const [socNombre, setSocNombre] = useState("");
+  const [socProfesion, setSocProfesion] = useState("");
+  const [socFuncion, setSocFuncion] = useState("");
+  const [msgSoc, setMsgSoc] = useState("");
+  const [guardSoc, setGuardSoc] = useState(false);
 
-  const [nombreProf, setNombreProf] = useState("");
-  const [profesion, setProfesion] = useState("");
-  const [funcion, setFuncion] = useState("");
-  const [rolProf, setRolProf] = useState("ABOGADO");
-  const [msgProf, setMsgProf] = useState("");
-  const [guardandoProf, setGuardandoProf] = useState(false);
+  const [eqNombre, setEqNombre] = useState("");
+  const [eqRol, setEqRol] = useState<PuestoCatalogo>("ESCRIBANO");
+  const [eqProfesion, setEqProfesion] = useState("");
+  const [eqFuncion, setEqFuncion] = useState("");
+  const [msgEq, setMsgEq] = useState("");
+  const [guardEq, setGuardEq] = useState(false);
 
   const [eliminar, setEliminar] = useState<EliminarPendiente | null>(null);
   const [eliminando, setEliminando] = useState(false);
   const [msgEliminar, setMsgEliminar] = useState("");
 
   const [editSocio, setEditSocio] = useState<SocioRow | null>(null);
-  const [editSocioNombre, setEditSocioNombre] = useState("");
-  const [guardandoEditSocio, setGuardandoEditSocio] = useState(false);
+  const [editSocNombre, setEditSocNombre] = useState("");
+  const [editSocProfesion, setEditSocProfesion] = useState("");
+  const [editSocFuncion, setEditSocFuncion] = useState("");
+  const [guardEditSocio, setGuardEditSocio] = useState(false);
   const [msgEditSocio, setMsgEditSocio] = useState("");
 
   const [editProf, setEditProf] = useState<ProfesionalRow | null>(null);
   const [editProfNombre, setEditProfNombre] = useState("");
   const [editProfProfesion, setEditProfProfesion] = useState("");
   const [editProfFuncion, setEditProfFuncion] = useState("");
-  const [editProfRol, setEditProfRol] = useState("ABOGADO");
-  const [guardandoEditProf, setGuardandoEditProf] = useState(false);
+  const [editProfRol, setEditProfRol] = useState<PuestoCatalogo>("DIRECTOR");
+  const [guardEditProf, setGuardEditProf] = useState(false);
   const [msgEditProf, setMsgEditProf] = useState("");
+
+  const [busquedaLista, setBusquedaLista] = useState("");
 
   const cargar = useCallback(async () => {
     setErrorLista("");
@@ -79,7 +113,7 @@ export function PanelMaestros() {
       }
       if (!rP.ok) {
         const j = (await rP.json().catch(() => ({}))) as { error?: string };
-        setErrorLista((prev) => prev || (j.error ?? "No se pudieron cargar los profesionales."));
+        setErrorLista((prev) => prev || (j.error ?? "No se pudo cargar el equipo."));
         setProfesionales([]);
       } else {
         setProfesionales((await rP.json()) as ProfesionalRow[]);
@@ -95,9 +129,47 @@ export function PanelMaestros() {
     void cargar();
   }, [cargar]);
 
+  const legalACargoCount = useMemo(
+    () => profesionales.filter((p) => p.grupo === "LEGAL_A_CARGO").length,
+    [profesionales],
+  );
+
+  const filasLista = useMemo((): FilaLista[] => {
+    const sRows: FilaLista[] = socios.map((s) => ({
+      key: `socio-${s.id}`,
+      tipo: "socio",
+      id: s.id,
+      nombre: s.nombre,
+      rolEtiqueta: "Socio",
+      areaEtiqueta: "Socio",
+      profesion: s.profesion,
+      funcion: s.funcion,
+    }));
+    const pRows: FilaLista[] = profesionales.map((p) => ({
+      key: `equipo-${p.id}`,
+      tipo: "equipo",
+      id: p.id,
+      nombre: p.nombre,
+      rolEtiqueta: ETIQUETA_PUESTO[p.puesto],
+      areaEtiqueta: ETIQUETA_GRUPO[p.grupo],
+      profesion: p.profesion,
+      funcion: p.funcion,
+    }));
+    return [...sRows, ...pRows].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }),
+    );
+  }, [socios, profesionales]);
+
+  const filasListaFiltradas = useMemo(
+    () => filasLista.filter((row) => nombreCoincideBusqueda(row.nombre, busquedaLista)),
+    [filasLista, busquedaLista],
+  );
+
   function abrirEditarSocio(s: SocioRow) {
     setEditSocio(s);
-    setEditSocioNombre(s.nombre);
+    setEditSocNombre(s.nombre);
+    setEditSocProfesion(s.profesion);
+    setEditSocFuncion(s.funcion);
     setMsgEditSocio("");
   }
 
@@ -106,27 +178,27 @@ export function PanelMaestros() {
     setEditProfNombre(p.nombre);
     setEditProfProfesion(p.profesion);
     setEditProfFuncion(p.funcion);
-    setEditProfRol(p.rol);
+    setEditProfRol(p.puesto);
     setMsgEditProf("");
   }
 
   async function guardarEditSocio(e: React.FormEvent) {
     e.preventDefault();
-    if (!editSocio) {
-      return;
-    }
-    const n = editSocioNombre.trim();
+    if (!editSocio) return;
+    const n = editSocNombre.trim();
+    const pr = editSocProfesion.trim();
+    const f = editSocFuncion.trim();
     if (!n) {
       setMsgEditSocio("El nombre es obligatorio.");
       return;
     }
-    setGuardandoEditSocio(true);
+    setGuardEditSocio(true);
     setMsgEditSocio("");
     try {
       const response = await fetch(`/api/socios/${editSocio.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: n }),
+        body: JSON.stringify({ nombre: n, profesion: pr, funcion: f }),
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
@@ -138,23 +210,25 @@ export function PanelMaestros() {
     } catch {
       setMsgEditSocio("Error de red.");
     } finally {
-      setGuardandoEditSocio(false);
+      setGuardEditSocio(false);
     }
   }
 
   async function guardarEditProf(e: React.FormEvent) {
     e.preventDefault();
-    if (!editProf) {
-      return;
-    }
+    if (!editProf) return;
     const n = editProfNombre.trim();
     const pr = editProfProfesion.trim();
     const f = editProfFuncion.trim();
-    if (!n || !pr || !f) {
-      setMsgEditProf("Completa nombre, profesion y funcion.");
+    if (!n) {
+      setMsgEditProf("El nombre es obligatorio.");
       return;
     }
-    setGuardandoEditProf(true);
+    if (puestoRequiereFuncionEnEstudio(editProfRol) && !f) {
+      setMsgEditProf("La funcion en el estudio es obligatoria para este rol.");
+      return;
+    }
+    setGuardEditProf(true);
     setMsgEditProf("");
     try {
       const response = await fetch(`/api/profesionales/${editProf.id}`, {
@@ -177,14 +251,12 @@ export function PanelMaestros() {
     } catch {
       setMsgEditProf("Error de red.");
     } finally {
-      setGuardandoEditProf(false);
+      setGuardEditProf(false);
     }
   }
 
   async function ejecutarEliminar() {
-    if (!eliminar || eliminar.paso !== 2) {
-      return;
-    }
+    if (!eliminar || eliminar.paso !== 2) return;
     setEliminando(true);
     setMsgEliminar("");
     const path =
@@ -209,91 +281,96 @@ export function PanelMaestros() {
 
   async function onSubmitSocio(e: React.FormEvent) {
     e.preventDefault();
-    const n = nombreSocio.trim();
+    const n = socNombre.trim();
+    const pr = socProfesion.trim();
+    const f = socFuncion.trim();
     if (!n) {
-      setMsgSocio("El nombre es obligatorio.");
+      setMsgSoc("El nombre es obligatorio.");
       return;
     }
-    setGuardandoSocio(true);
-    setMsgSocio("");
+    setGuardSoc(true);
+    setMsgSoc("");
     try {
       const response = await fetch("/api/socios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: n }),
+        body: JSON.stringify({ nombre: n, profesion: pr, funcion: f }),
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        setMsgSocio(data.error ?? "No se pudo crear el socio.");
+        setMsgSoc(data.error ?? "No se pudo crear el socio.");
         return;
       }
-      setNombreSocio("");
-      setMsgSocio("Socio creado correctamente.");
+      setSocNombre("");
+      setSocProfesion("");
+      setSocFuncion("");
+      setMsgSoc("Socio creado correctamente.");
       await cargar();
     } catch {
-      setMsgSocio("Error de red.");
+      setMsgSoc("Error de red.");
     } finally {
-      setGuardandoSocio(false);
+      setGuardSoc(false);
     }
   }
 
-  async function onSubmitProf(e: React.FormEvent) {
+  async function onSubmitEquipo(e: React.FormEvent) {
     e.preventDefault();
-    const n = nombreProf.trim();
-    const p = profesion.trim();
-    const f = funcion.trim();
-    if (!n || !p || !f) {
-      setMsgProf("Completa nombre, profesion y funcion.");
+    const n = eqNombre.trim();
+    const pr = eqProfesion.trim();
+    const f = eqFuncion.trim();
+    if (!n) {
+      setMsgEq("El nombre es obligatorio.");
       return;
     }
-    setGuardandoProf(true);
-    setMsgProf("");
+    if (puestoRequiereFuncionEnEstudio(eqRol) && !f) {
+      setMsgEq("Para este rol la funcion en el estudio es obligatoria.");
+      return;
+    }
+    setGuardEq(true);
+    setMsgEq("");
     try {
       const response = await fetch("/api/profesionales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: n,
-          profesion: p,
+          rol: eqRol,
+          profesion: pr,
           funcion: f,
-          rol: rolProf,
         }),
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        setMsgProf(data.error ?? "No se pudo crear el profesional.");
+        setMsgEq(data.error ?? "No se pudo dar de alta.");
         return;
       }
-      setNombreProf("");
-      setProfesion("");
-      setFuncion("");
-      setRolProf("ABOGADO");
-      setMsgProf("Profesional creado correctamente.");
+      setEqNombre("");
+      setEqRol("ESCRIBANO");
+      setEqProfesion("");
+      setEqFuncion("");
+      setMsgEq("Miembro del equipo creado correctamente.");
       await cargar();
     } catch {
-      setMsgProf("Error de red.");
+      setMsgEq("Error de red.");
     } finally {
-      setGuardandoProf(false);
+      setGuardEq(false);
     }
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-2">
+    <div className="space-y-8">
       {errorLista ? (
-        <p className="lg:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {errorLista}
         </p>
       ) : null}
 
-      {/* Modal doble confirmación eliminar */}
       {eliminar ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           role="presentation"
           onClick={() => {
-            if (!eliminando) {
-              setEliminar(null);
-            }
+            if (!eliminando) setEliminar(null);
           }}
         >
           <div
@@ -309,14 +386,12 @@ export function PanelMaestros() {
             </h2>
             {eliminar.paso === 1 ? (
               <p className="mt-3 text-sm text-blue-900/90">
-                ¿Está seguro que desea eliminar{" "}
-                <span className="font-semibold text-blue-950">{eliminar.etiqueta}</span>?
+                ¿Eliminar <span className="font-semibold text-blue-950">{eliminar.etiqueta}</span>?
               </p>
             ) : (
               <p className="mt-3 text-sm text-blue-900/90">
-                Segunda confirmación: se eliminará de forma permanente{" "}
-                <span className="font-semibold text-blue-950">{eliminar.etiqueta}</span>. Esta acción
-                no se puede deshacer.
+                Segunda confirmación: se eliminará permanentemente{" "}
+                <span className="font-semibold text-blue-950">{eliminar.etiqueta}</span>.
               </p>
             )}
             {msgEliminar ? <p className="mt-2 text-sm text-red-700">{msgEliminar}</p> : null}
@@ -326,11 +401,10 @@ export function PanelMaestros() {
                 className={btnSec}
                 disabled={eliminando}
                 onClick={() => {
-                  if (eliminando) {
-                    return;
+                  if (!eliminando) {
+                    setMsgEliminar("");
+                    setEliminar(null);
                   }
-                  setMsgEliminar("");
-                  setEliminar(null);
                 }}
               >
                 Cancelar
@@ -362,38 +436,50 @@ export function PanelMaestros() {
         </div>
       ) : null}
 
-      {/* Modal editar socio */}
       {editSocio ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           role="presentation"
           onClick={() => {
-            if (!guardandoEditSocio) {
-              setEditSocio(null);
-            }
+            if (!guardEditSocio) setEditSocio(null);
           }}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="edit-socio-titulo"
             className="w-full max-w-md rounded-xl border border-blue-200 bg-white p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            <h2 id="edit-socio-titulo" className="text-lg font-semibold text-blue-950">
-              Editar socio
-            </h2>
+            <h2 className="text-lg font-semibold text-blue-950">Editar socio</h2>
+            <p className="mt-1 text-sm text-blue-800/75">Rol: Socio (fijo).</p>
             <form className="mt-4 space-y-3" onSubmit={(e) => void guardarEditSocio(e)}>
               <div>
-                <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="edit-socio-nombre">
-                  Nombre
+                <label className="mb-1 block text-sm font-medium text-blue-950">Nombre *</label>
+                <input
+                  className={inputClass}
+                  value={editSocNombre}
+                  onChange={(e) => setEditSocNombre(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-blue-950">
+                  Profesión (opcional)
                 </label>
                 <input
-                  id="edit-socio-nombre"
-                  className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
-                  value={editSocioNombre}
-                  onChange={(e) => setEditSocioNombre(e.target.value)}
+                  className={inputClass}
+                  value={editSocProfesion}
+                  onChange={(e) => setEditSocProfesion(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-blue-950">
+                  Función en el estudio (opcional)
+                </label>
+                <input
+                  className={inputClass}
+                  value={editSocFuncion}
+                  onChange={(e) => setEditSocFuncion(e.target.value)}
                 />
               </div>
               {msgEditSocio ? <p className="text-sm text-red-700">{msgEditSocio}</p> : null}
@@ -401,17 +487,17 @@ export function PanelMaestros() {
                 <button
                   type="button"
                   className={btnSec}
-                  disabled={guardandoEditSocio}
+                  disabled={guardEditSocio}
                   onClick={() => setEditSocio(null)}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={guardandoEditSocio}
+                  disabled={guardEditSocio}
                   className="rounded-md bg-blue-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-950 disabled:opacity-60"
                 >
-                  {guardandoEditSocio ? "Guardando…" : "Guardar"}
+                  {guardEditSocio ? "Guardando…" : "Guardar"}
                 </button>
               </div>
             </form>
@@ -419,95 +505,87 @@ export function PanelMaestros() {
         </div>
       ) : null}
 
-      {/* Modal editar profesional */}
       {editProf ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           role="presentation"
           onClick={() => {
-            if (!guardandoEditProf) {
-              setEditProf(null);
-            }
+            if (!guardEditProf) setEditProf(null);
           }}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="edit-prof-titulo"
-            className="w-full max-w-md rounded-xl border border-blue-200 bg-white p-5 shadow-xl"
+            className="w-full max-w-lg rounded-xl border border-blue-200 bg-white p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            <h2 id="edit-prof-titulo" className="text-lg font-semibold text-blue-950">
-              Editar profesional
-            </h2>
+            <h2 className="text-lg font-semibold text-blue-950">Editar miembro del equipo</h2>
+            <p className="mt-1 text-sm text-blue-800/75">
+              Área actual: {ETIQUETA_GRUPO[grupoDesdePuesto(editProfRol)]} — el rol define el área.
+            </p>
             <form className="mt-4 space-y-3" onSubmit={(e) => void guardarEditProf(e)}>
               <div>
-                <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="edit-prof-nombre">
-                  Nombre
-                </label>
+                <label className="mb-1 block text-sm font-medium text-blue-950">Nombre *</label>
                 <input
-                  id="edit-prof-nombre"
-                  className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
+                  className={inputClass}
                   value={editProfNombre}
                   onChange={(e) => setEditProfNombre(e.target.value)}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="edit-prof-profesion">
-                  Profesion
+                <label className="mb-1 block text-sm font-medium text-blue-950">Rol *</label>
+                <select
+                  className={inputClass}
+                  value={editProfRol}
+                  onChange={(e) => setEditProfRol(e.target.value as PuestoCatalogo)}
+                >
+                  {PUESTOS_EQUIPO_ORDEN.map((pu) => (
+                    <option key={pu} value={pu}>
+                      {ETIQUETA_PUESTO[pu]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-blue-950">
+                  Profesión (opcional)
                 </label>
                 <input
-                  id="edit-prof-profesion"
-                  className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
+                  className={inputClass}
                   value={editProfProfesion}
                   onChange={(e) => setEditProfProfesion(e.target.value)}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="edit-prof-funcion">
-                  Funcion
+                <label className="mb-1 block text-sm font-medium text-blue-950">
+                  Función en el estudio
+                  {!puestoRequiereFuncionEnEstudio(editProfRol) ? (
+                    <span className="font-normal text-blue-800/70"> (opcional en dirección)</span>
+                  ) : null}
                 </label>
                 <input
-                  id="edit-prof-funcion"
-                  className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
+                  className={inputClass}
                   value={editProfFuncion}
                   onChange={(e) => setEditProfFuncion(e.target.value)}
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="edit-prof-rol">
-                  Rol operativo
-                </label>
-                <select
-                  id="edit-prof-rol"
-                  className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
-                  value={editProfRol}
-                  onChange={(e) => setEditProfRol(e.target.value)}
-                >
-                  {ROLES_SELECT.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
               </div>
               {msgEditProf ? <p className="text-sm text-red-700">{msgEditProf}</p> : null}
               <div className="flex flex-wrap justify-end gap-2 pt-2">
                 <button
                   type="button"
                   className={btnSec}
-                  disabled={guardandoEditProf}
+                  disabled={guardEditProf}
                   onClick={() => setEditProf(null)}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={guardandoEditProf}
+                  disabled={guardEditProf}
                   className="rounded-md bg-blue-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-950 disabled:opacity-60"
                 >
-                  {guardandoEditProf ? "Guardando…" : "Guardar"}
+                  {guardEditProf ? "Guardando…" : "Guardar"}
                 </button>
               </div>
             </form>
@@ -515,207 +593,279 @@ export function PanelMaestros() {
         </div>
       ) : null}
 
-      <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
-        <h2 className="text-lg font-semibold text-blue-950">Nuevo socio</h2>
-        <form className="space-y-3" onSubmit={(e) => void onSubmitSocio(e)}>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
           <div>
-            <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="maestro-socio-nombre">
-              Nombre
-            </label>
-            <input
-              id="maestro-socio-nombre"
-              className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
-              value={nombreSocio}
-              onChange={(e) => setNombreSocio(e.target.value)}
-              placeholder="Nombre del socio"
-              autoComplete="name"
-            />
-          </div>
-          {msgSocio ? (
-            <p
-              className={
-                msgSocio.includes("correctamente")
-                  ? "text-sm text-emerald-700"
-                  : "text-sm text-red-700"
-              }
-            >
-              {msgSocio}
+            <h2 className="text-lg font-semibold text-blue-950">Alta de socio</h2>
+            <p className="mt-1 text-sm text-blue-800/75">
+              Nombre obligatorio. Rol fijo: <strong>Socio</strong>. Profesión y función son opcionales.
             </p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={guardandoSocio}
-            className="rounded-lg bg-blue-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-950 disabled:opacity-60"
-          >
-            {guardandoSocio ? "Guardando…" : "Dar de alta socio"}
-          </button>
-        </form>
+          </div>
+          <form className="space-y-3" onSubmit={(e) => void onSubmitSocio(e)}>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="alta-soc-nombre">
+                Nombre *
+              </label>
+              <input
+                id="alta-soc-nombre"
+                className={inputClass}
+                value={socNombre}
+                onChange={(e) => setSocNombre(e.target.value)}
+                autoComplete="name"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="alta-soc-prof">
+                Profesión (opcional)
+              </label>
+              <input
+                id="alta-soc-prof"
+                className={inputClass}
+                value={socProfesion}
+                onChange={(e) => setSocProfesion(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="alta-soc-func">
+                Función en el estudio (opcional)
+              </label>
+              <input
+                id="alta-soc-func"
+                className={inputClass}
+                value={socFuncion}
+                onChange={(e) => setSocFuncion(e.target.value)}
+              />
+            </div>
+            {msgSoc ? (
+              <p
+                className={
+                  msgSoc.includes("correctamente") ? "text-sm text-emerald-700" : "text-sm text-red-700"
+                }
+              >
+                {msgSoc}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={guardSoc}
+              className="rounded-lg bg-blue-900 px-4 py-2 text-sm font-medium text-white hover:bg-blue-950 disabled:opacity-60"
+            >
+              {guardSoc ? "Guardando…" : "Dar de alta socio"}
+            </button>
+          </form>
+        </div>
 
-        <div className="border-t border-blue-100 pt-4">
-          <h3 className="mb-2 text-sm font-semibold text-blue-900">Socios ({cargando ? "…" : socios.length})</h3>
-          {cargando ? (
-            <p className="text-sm text-blue-800/70">Cargando…</p>
-          ) : socios.length === 0 ? (
-            <p className="text-sm text-blue-800/70">No hay socios cargados.</p>
-          ) : (
-            <ul className="max-h-72 space-y-1.5 overflow-y-auto text-sm text-blue-950">
-              {socios.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100/80 bg-blue-50/40 px-2 py-2"
-                >
-                  <span className="min-w-0 flex-1">{s.nombre}</span>
-                  <span className="flex shrink-0 gap-1.5">
-                    <button type="button" className={btnSec} onClick={() => abrirEditarSocio(s)}>
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className={btnPeligro}
-                      onClick={() => {
-                        setMsgEliminar("");
-                        setEliminar({
-                          kind: "socio",
-                          id: s.id,
-                          etiqueta: s.nombre,
-                          paso: 1,
-                        });
-                      }}
-                    >
-                      Eliminar
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
+          <div>
+            <h2 className="text-lg font-semibold text-blue-950">Alta de equipo</h2>
+            <p className="mt-1 text-sm text-blue-800/75">
+              Nombre y rol obligatorios. El rol define el área (dirección, legal, colaborador, contador).
+              Profesión opcional. Función obligatoria salvo director/gerente.
+            </p>
+          </div>
+          <form className="space-y-3" onSubmit={(e) => void onSubmitEquipo(e)}>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="alta-eq-nombre">
+                Nombre *
+              </label>
+              <input
+                id="alta-eq-nombre"
+                className={inputClass}
+                value={eqNombre}
+                onChange={(e) => setEqNombre(e.target.value)}
+                autoComplete="name"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="alta-eq-rol">
+                Rol *
+              </label>
+              <select
+                id="alta-eq-rol"
+                className={inputClass}
+                value={eqRol}
+                onChange={(e) => setEqRol(e.target.value as PuestoCatalogo)}
+              >
+                {PUESTOS_EQUIPO_ORDEN.map((pu) => (
+                  <option key={pu} value={pu}>
+                    {ETIQUETA_PUESTO[pu]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="alta-eq-prof">
+                Profesión (opcional)
+              </label>
+              <input
+                id="alta-eq-prof"
+                className={inputClass}
+                value={eqProfesion}
+                onChange={(e) => setEqProfesion(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="alta-eq-func">
+                Función en el estudio
+                {!puestoRequiereFuncionEnEstudio(eqRol) ? (
+                  <span className="font-normal text-blue-800/70"> (opcional)</span>
+                ) : (
+                  <span className="font-normal text-red-800/80"> *</span>
+                )}
+              </label>
+              <input
+                id="alta-eq-func"
+                className={inputClass}
+                value={eqFuncion}
+                onChange={(e) => setEqFuncion(e.target.value)}
+              />
+            </div>
+            {msgEq ? (
+              <p
+                className={
+                  msgEq.includes("correctamente") ? "text-sm text-emerald-700" : "text-sm text-red-700"
+                }
+              >
+                {msgEq}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={guardEq}
+              className="rounded-lg bg-blue-900 px-4 py-2 text-sm font-medium text-white hover:bg-blue-950 disabled:opacity-60"
+            >
+              {guardEq ? "Guardando…" : "Dar de alta equipo"}
+            </button>
+          </form>
         </div>
       </div>
 
-      <div className="space-y-4 rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
-        <h2 className="text-lg font-semibold text-blue-950">Nuevo profesional</h2>
-        <form className="space-y-3" onSubmit={(e) => void onSubmitProf(e)}>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="maestro-prof-nombre">
-              Nombre
-            </label>
-            <input
-              id="maestro-prof-nombre"
-              className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
-              value={nombreProf}
-              onChange={(e) => setNombreProf(e.target.value)}
-              placeholder="Nombre completo"
-              autoComplete="name"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="maestro-profesion">
-              Profesion
-            </label>
-            <input
-              id="maestro-profesion"
-              className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
-              value={profesion}
-              onChange={(e) => setProfesion(e.target.value)}
-              placeholder="Ej. Abogado, Escribano"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="maestro-funcion">
-              Funcion en el estudio
-            </label>
-            <input
-              id="maestro-funcion"
-              className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
-              value={funcion}
-              onChange={(e) => setFuncion(e.target.value)}
-              placeholder="Ej. Socio, Asociado, Colaborador externo"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-blue-950" htmlFor="maestro-rol">
-              Rol operativo
-            </label>
-            <select
-              id="maestro-rol"
-              className="w-full rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-950 outline-none ring-blue-400/30 focus:ring-2"
-              value={rolProf}
-              onChange={(e) => setRolProf(e.target.value)}
-            >
-              {ROLES_SELECT.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {msgProf ? (
-            <p
-              className={
-                msgProf.includes("correctamente")
-                  ? "text-sm text-emerald-700"
-                  : "text-sm text-red-700"
-              }
-            >
-              {msgProf}
+      <div className="rounded-xl border border-blue-200/80 bg-white p-5 shadow-sm shadow-blue-950/5">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-blue-950">Listado unificado</h2>
+            <p className="mt-1 text-sm text-blue-800/75">
+              Socios y equipo en un solo listado. Para nuevos asuntos hace falta al menos un socio y un
+              profesional a cargo (escribano o abogado).
             </p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={guardandoProf}
-            className="rounded-lg bg-blue-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-950 disabled:opacity-60"
-          >
-            {guardandoProf ? "Guardando…" : "Dar de alta profesional"}
-          </button>
-        </form>
-
-        <div className="border-t border-blue-100 pt-4">
-          <h3 className="mb-2 text-sm font-semibold text-blue-900">
-            Profesionales ({cargando ? "…" : profesionales.length})
-          </h3>
-          {cargando ? (
-            <p className="text-sm text-blue-800/70">Cargando…</p>
-          ) : profesionales.length === 0 ? (
-            <p className="text-sm text-blue-800/70">No hay profesionales cargados.</p>
-          ) : (
-            <ul className="max-h-72 space-y-1.5 overflow-y-auto text-sm text-blue-950">
-              {profesionales.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100/80 bg-blue-50/40 px-2 py-2"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="font-medium">{p.nombre}</span>
-                    <span className="text-blue-800/80">
-                      {" "}
-                      — {p.profesion} · {p.funcion} · {p.rol}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 gap-1.5">
-                    <button type="button" className={btnSec} onClick={() => abrirEditarProf(p)}>
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className={btnPeligro}
-                      onClick={() => {
-                        setMsgEliminar("");
-                        setEliminar({
-                          kind: "profesional",
-                          id: p.id,
-                          etiqueta: p.nombre,
-                          paso: 1,
-                        });
-                      }}
-                    >
-                      Eliminar
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+            {!cargando && legalACargoCount === 0 ? (
+              <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Aún no hay escribano/abogado a cargo en el equipo.
+              </p>
+            ) : null}
+          </div>
+          <div className="w-full sm:w-auto sm:min-w-[220px] sm:max-w-sm">
+            <label
+              className="mb-1 block text-xs font-medium text-blue-900/85"
+              htmlFor="busqueda-lista-maestros"
+            >
+              Buscar por nombre
+            </label>
+            <input
+              id="busqueda-lista-maestros"
+              type="search"
+              className={inputClass}
+              placeholder="Filtrar el listado…"
+              value={busquedaLista}
+              onChange={(e) => setBusquedaLista(e.target.value)}
+              autoComplete="off"
+              disabled={cargando || filasLista.length === 0}
+            />
+          </div>
         </div>
+        {cargando ? (
+          <p className="text-sm text-blue-800/70">Cargando…</p>
+        ) : filasLista.length === 0 ? (
+          <p className="text-sm text-blue-800/70">No hay registros.</p>
+        ) : filasListaFiltradas.length === 0 ? (
+          <p className="text-sm text-blue-800/70">
+            No hay coincidencias{busquedaLista.trim() ? ` para «${busquedaLista.trim()}»` : ""}.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-left text-sm text-blue-950">
+              <thead>
+                <tr className="border-b border-blue-200 text-xs font-semibold uppercase tracking-wide text-blue-800/85">
+                  <th className="py-2 pr-3">Tipo</th>
+                  <th className="py-2 pr-3">Nombre</th>
+                  <th className="py-2 pr-3">Rol</th>
+                  <th className="py-2 pr-3">Área</th>
+                  <th className="py-2 pr-3">Profesión</th>
+                  <th className="py-2 pr-3">Función</th>
+                  <th className="py-2 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filasListaFiltradas.map((row) => (
+                  <tr key={row.key} className="border-b border-blue-100/80">
+                    <td className="py-2.5 pr-3">
+                      <span
+                        className={
+                          row.tipo === "socio"
+                            ? "rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900"
+                            : "rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-900"
+                        }
+                      >
+                        {row.tipo === "socio" ? "Socio" : "Equipo"}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-3 font-medium">{row.nombre}</td>
+                    <td className="py-2.5 pr-3 text-blue-900/90">{row.rolEtiqueta}</td>
+                    <td className="py-2.5 pr-3 text-blue-800/80">{row.areaEtiqueta}</td>
+                    <td className="max-w-[140px] truncate py-2.5 pr-3 text-blue-800/80" title={row.profesion}>
+                      {row.profesion || "—"}
+                    </td>
+                    <td className="max-w-[160px] truncate py-2.5 pr-3 text-blue-800/80" title={row.funcion}>
+                      {row.funcion || "—"}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <span className="inline-flex flex-wrap justify-end gap-1.5">
+                        {row.tipo === "socio" ? (
+                          <button
+                            type="button"
+                            className={btnSec}
+                            onClick={() => {
+                              const s = socios.find((x) => x.id === row.id);
+                              if (s) abrirEditarSocio(s);
+                            }}
+                          >
+                            Editar
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className={btnSec}
+                            onClick={() => {
+                              const p = profesionales.find((x) => x.id === row.id);
+                              if (p) abrirEditarProf(p);
+                            }}
+                          >
+                            Editar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className={btnPeligro}
+                          onClick={() => {
+                            setMsgEliminar("");
+                            setEliminar({
+                              kind: row.tipo === "socio" ? "socio" : "profesional",
+                              id: row.id,
+                              etiqueta: row.nombre,
+                              paso: 1,
+                            });
+                          }}
+                        >
+                          Eliminar
+                        </button>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

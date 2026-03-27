@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requiereApiMaestrosEstudio } from "@/lib/api-auth";
 import {
   esPrismaValidacion,
+  mensajeErrorApiDbAcceso,
   mensajeErrorDesarrollo,
   mensajeErrorPrismaParaUsuario,
   obtenerErrorConfiguracionDb,
@@ -23,14 +24,11 @@ export async function GET() {
   try {
     const socios = await prisma.socio.findMany({
       orderBy: { nombre: "asc" },
-      select: { id: true, nombre: true, createdAt: true },
+      select: { id: true, nombre: true, profesion: true, funcion: true, createdAt: true },
     });
     return NextResponse.json(socios);
-  } catch {
-    return NextResponse.json(
-      { error: "No se pudo conectar a PostgreSQL. Revisa DATABASE_URL y el servidor de base." },
-      { status: 503 },
-    );
+  } catch (e) {
+    return NextResponse.json({ error: mensajeErrorApiDbAcceso(e) }, { status: 503 });
   }
 }
 
@@ -53,16 +51,18 @@ export async function POST(request: Request) {
   }
 
   const nombre = String(body?.nombre ?? "").trim();
+  const profesion = String(body?.profesion ?? "").trim();
+  const funcion = String(body?.funcion ?? "").trim();
   if (!nombre) {
     return NextResponse.json({ error: "El nombre del socio es obligatorio." }, { status: 400 });
   }
-  if (nombre.length > 500) {
-    return NextResponse.json({ error: "El nombre es demasiado largo." }, { status: 400 });
+  if (nombre.length > 500 || profesion.length > 500 || funcion.length > 500) {
+    return NextResponse.json({ error: "Algun texto supera el limite permitido." }, { status: 400 });
   }
 
   try {
     const socio = await prisma.socio.create({
-      data: { nombre },
+      data: { nombre, profesion, funcion },
     });
 
     await registrarAuditoria({

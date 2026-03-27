@@ -41,16 +41,29 @@ export function mensajeErrorPrismaParaUsuario(error: unknown): string | null {
   }
   if (typeof error === "object" && error !== null && "code" in error) {
     const code = String((error as { code?: string }).code);
+    const maybeMsg = (error as unknown as { message?: unknown }).message;
     const msg =
       error instanceof Error
         ? error.message
-        : typeof (error as { message?: string }).message === "string"
-          ? (error as { message: string }).message
+        : typeof maybeMsg === "string"
+          ? maybeMsg
           : "";
     if (code === "P2002") return null;
     return mensajePorCodigoPrisma(code, msg);
   }
   return null;
+}
+
+/**
+ * Mensaje para APIs cuando falla un acceso a la base (conexion, migraciones, etc.).
+ * Evita mostrar siempre "no se pudo conectar" cuando el fallo es tablas/columnas faltantes.
+ */
+export function mensajeErrorApiDbAcceso(error: unknown): string {
+  return (
+    mensajeErrorPrismaParaUsuario(error) ??
+    mensajeErrorDesarrollo(error) ??
+    "No se pudo acceder a la base de datos. Verifica DATABASE_URL, que PostgreSQL este en marcha y ejecuta npx prisma migrate deploy si actualizaste el codigo."
+  );
 }
 
 /** Errores de validacion del cliente Prisma (argumentos invalidos). */

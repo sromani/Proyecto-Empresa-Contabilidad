@@ -3,7 +3,8 @@ require(path.join(__dirname, "../scripts/prisma-normalize-env.cjs"));
 const bcrypt = require("bcryptjs");
 const {
   PrismaClient,
-  RolProfesional,
+  GrupoProfesional,
+  PuestoProfesional,
   RolApp,
 } = require(path.join(__dirname, "../src/generated/prisma"));
 
@@ -28,21 +29,24 @@ async function main() {
       nombre: "Lucia Fernandez",
       profesion: "Escribana",
       funcion: "Responsable de protocolos",
-      rol: RolProfesional.ESCRIBANO,
+      grupo: GrupoProfesional.LEGAL_A_CARGO,
+      puesto: PuestoProfesional.ESCRIBANO,
     },
     {
       id: "seed-profesional-martin",
       nombre: "Martin Silva",
       profesion: "Abogado",
       funcion: "Patrocinio legal",
-      rol: RolProfesional.ABOGADO,
+      grupo: GrupoProfesional.LEGAL_A_CARGO,
+      puesto: PuestoProfesional.ABOGADO,
     },
     {
       id: "seed-profesional-carolina",
       nombre: "Carolina Diaz",
       profesion: "Procuradora",
       funcion: "Gestion de expedientes",
-      rol: RolProfesional.PROCURADOR,
+      grupo: GrupoProfesional.LEGAL_COLABORADOR,
+      puesto: PuestoProfesional.PROCURADOR,
     },
   ];
 

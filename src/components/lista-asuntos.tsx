@@ -145,11 +145,16 @@ export function ListaAsuntos() {
     void fetch("/api/catalogos")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const p = (d?.profesionales ?? []) as { id?: string; nombre?: string }[];
+        const p = (d?.profesionales ?? []) as { id?: string; nombre?: string; grupo?: string }[];
         const s = (d?.socios ?? []) as { id?: string; nombre?: string }[];
         setProfesionales(
           p
-            .filter((x) => typeof x.id === "string" && typeof x.nombre === "string")
+            .filter(
+              (x) =>
+                typeof x.id === "string" &&
+                typeof x.nombre === "string" &&
+                x.grupo === "LEGAL_A_CARGO",
+            )
             .map((x) => ({ id: x.id as string, nombre: x.nombre as string })),
         );
         setSocios(
@@ -276,7 +281,7 @@ export function ListaAsuntos() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-700/90">Equipo</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label>
-              <span className={labelFiltro}>Profesional a cargo</span>
+              <span className={labelFiltro}>Equipo a cargo</span>
               <select
                 className="input-app py-2 text-sm"
                 value={profesionalACargoId}
@@ -409,7 +414,7 @@ export function ListaAsuntos() {
                     <th className="px-4 py-3 font-semibold">Tipo</th>
                     <th className="px-4 py-3 font-semibold">Cliente</th>
                     <th className="px-4 py-3 font-semibold">Asunto</th>
-                    <th className="px-4 py-3 font-semibold">Profesional</th>
+                    <th className="px-4 py-3 font-semibold">Equipo</th>
                     <th className="px-4 py-3 font-semibold">Inicio</th>
                     <th className="px-4 py-3 font-semibold text-right">Acción</th>
                   </tr>
@@ -487,7 +492,7 @@ export function ListaAsuntos() {
                     <span className="text-blue-600/80">Tipo:</span> {etiquetaTipo(a.tipo)}
                   </span>
                   <span>
-                    <span className="text-blue-600/80">Prof.:</span> {a.profesionalACargo.nombre}
+                    <span className="text-blue-600/80">Equipo:</span> {a.profesionalACargo.nombre}
                   </span>
                   <span>
                     <span className="text-blue-600/80">Inicio:</span> {fmtFechaCorta(a.fechaInicio)}

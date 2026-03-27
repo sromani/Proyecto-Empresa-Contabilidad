@@ -1,5 +1,3 @@
-import { ROLES, Rol } from "@/constants/roles";
-
 export type Cliente = {
   id: string;
   nombre: string;
@@ -11,7 +9,8 @@ export type Profesional = {
   nombre: string;
   profesion: string;
   funcion: string;
-  rol: Rol;
+  grupo: string;
+  puesto: string;
 };
 
 export const ASUNTOS_BASE = ["Compraventa", "Sucesion", "Arrendamiento"];
@@ -27,21 +26,24 @@ export const PROFESIONALES_BASE: Profesional[] = [
     nombre: "Lucia Fernandez",
     profesion: "Escribana",
     funcion: "Responsable de protocolos",
-    rol: ROLES.ESCRIBANO,
+    grupo: "LEGAL_A_CARGO",
+    puesto: "ESCRIBANO",
   },
   {
     id: "p2",
     nombre: "Martin Silva",
     profesion: "Abogado",
     funcion: "Patrocinio legal",
-    rol: ROLES.ABOGADO,
+    grupo: "LEGAL_A_CARGO",
+    puesto: "ABOGADO",
   },
   {
     id: "p3",
     nombre: "Carolina Diaz",
     profesion: "Procuradora",
     funcion: "Gestion de expedientes",
-    rol: ROLES.PROCURADOR,
+    grupo: "LEGAL_COLABORADOR",
+    puesto: "PROCURADOR",
   },
 ];
 

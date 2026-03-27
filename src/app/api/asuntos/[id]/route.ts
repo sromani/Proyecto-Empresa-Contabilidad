@@ -45,6 +45,7 @@ export async function GET(_request: Request, context: Params) {
         socioReferente: true,
         profesionalACargo: true,
         colaboradorACargo: true,
+        colaboradorACargo2: true,
         contadorReferente: true,
         seguimientos: { orderBy: { fecha: "desc" } },
       },

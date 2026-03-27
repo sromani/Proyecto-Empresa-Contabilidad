@@ -1,4 +1,3 @@
-import { RolProfesional } from "@/generated/prisma";
 import { NextResponse } from "next/server";
 import { requiereApiMaestrosEstudio } from "@/lib/api-auth";
 import {
@@ -8,14 +7,9 @@ import {
   obtenerErrorConfiguracionDb,
 } from "@/lib/api-db";
 import { registrarAuditoria } from "@/lib/auditoria";
+import { GrupoProfesional } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-
-const ROLES_PROFESIONAL = new Set<string>(Object.values(RolProfesional));
-
-function parseRolProfesional(raw: string): RolProfesional | null {
-  const u = raw.trim().toUpperCase();
-  return ROLES_PROFESIONAL.has(u) ? (u as RolProfesional) : null;
-}
+import { requiereFuncionEnEstudio, resolverGrupoPuestoDesdeBody } from "@/lib/profesional-equipo";
 
 function esP2003(error: unknown): boolean {
   return (
@@ -61,43 +55,82 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const nombre = String(body?.nombre ?? "").trim();
-  const profesion = String(body?.profesion ?? "").trim();
-  const funcion = String(body?.funcion ?? "").trim();
-  const rol = parseRolProfesional(String(body?.rol ?? ""));
+  const profesion = body?.profesion !== undefined ? String(body.profesion).trim() : undefined;
+  const funcionExplicita = body?.funcion !== undefined;
+  const funcionTrim = funcionExplicita ? String(body.funcion).trim() : "";
 
   if (!nombre) {
     return NextResponse.json({ error: "El nombre es obligatorio." }, { status: 400 });
   }
-  if (!profesion) {
-    return NextResponse.json({ error: "La profesion es obligatoria." }, { status: 400 });
-  }
-  if (!funcion) {
-    return NextResponse.json({ error: "La funcion es obligatoria." }, { status: 400 });
-  }
-  if (!rol) {
-    return NextResponse.json(
-      {
-        error:
-          "Rol invalido. Use uno de: SOCIO, ESCRIBANO, ABOGADO, PROCURADOR, CONTADOR.",
-      },
-      { status: 400 },
-    );
-  }
 
   const max = 500;
-  if (nombre.length > max || profesion.length > max || funcion.length > max) {
+  if (
+    nombre.length > max ||
+    (funcionExplicita && funcionTrim.length > max) ||
+    (profesion !== undefined && profesion.length > max)
+  ) {
     return NextResponse.json({ error: "Algun texto supera el limite permitido." }, { status: 400 });
   }
 
   try {
     const anterior = await prisma.profesional.findUnique({ where: { id } });
     if (!anterior) {
-      return NextResponse.json({ error: "Profesional no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Miembro del equipo no encontrado." }, { status: 404 });
+    }
+
+    const cambiaRol =
+      body?.rol !== undefined || body?.grupo !== undefined || body?.puesto !== undefined;
+    let grupoFinal = anterior.grupo;
+    let puestoFinal = anterior.puesto;
+    if (cambiaRol) {
+      const r = resolverGrupoPuestoDesdeBody(body);
+      if (!r) {
+        return NextResponse.json(
+          { error: "Rol, grupo o puesto invalido. Usa un rol valido o la pareja grupo/puesto." },
+          { status: 400 },
+        );
+      }
+      grupoFinal = r.grupo;
+      puestoFinal = r.puesto;
+    }
+    const funcion = funcionExplicita ? funcionTrim : anterior.funcion;
+    if (requiereFuncionEnEstudio(grupoFinal) && !funcion) {
+      return NextResponse.json(
+        { error: "La funcion en el estudio es obligatoria para este tipo de miembro." },
+        { status: 400 },
+      );
+    }
+
+    if (
+      anterior.grupo === GrupoProfesional.LEGAL_A_CARGO &&
+      grupoFinal !== GrupoProfesional.LEGAL_A_CARGO
+    ) {
+      const otrosLegalACargo = await prisma.profesional.count({
+        where: {
+          grupo: GrupoProfesional.LEGAL_A_CARGO,
+          id: { not: id },
+        },
+      });
+      if (otrosLegalACargo === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "No se puede cambiar de bloque: debe quedar al menos un profesional a cargo (escribano o abogado) en maestros.",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     const profesional = await prisma.profesional.update({
       where: { id },
-      data: { nombre, profesion, funcion, rol },
+      data: {
+        nombre,
+        funcion,
+        grupo: grupoFinal,
+        puesto: puestoFinal,
+        ...(profesion !== undefined ? { profesion } : {}),
+      },
     });
 
     await registrarAuditoria({
@@ -108,15 +141,15 @@ export async function PATCH(request: Request, context: RouteContext) {
       detalle: {
         antes: {
           nombre: anterior.nombre,
-          profesion: anterior.profesion,
           funcion: anterior.funcion,
-          rol: anterior.rol,
+          grupo: anterior.grupo,
+          puesto: anterior.puesto,
         },
         despues: {
           nombre: profesional.nombre,
-          profesion: profesional.profesion,
           funcion: profesional.funcion,
-          rol: profesional.rol,
+          grupo: profesional.grupo,
+          puesto: profesional.puesto,
         },
       },
     });
@@ -137,7 +170,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         error:
           detalle ??
           extraDev ??
-          "No se pudo actualizar el profesional. Revisa la terminal del servidor.",
+          "No se pudo actualizar al miembro del equipo. Revisa la terminal del servidor.",
       },
       { status: 503 },
     );
@@ -163,10 +196,28 @@ export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const anterior = await prisma.profesional.findUnique({
       where: { id },
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, grupo: true },
     });
     if (!anterior) {
-      return NextResponse.json({ error: "Profesional no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Miembro del equipo no encontrado." }, { status: 404 });
+    }
+
+    if (anterior.grupo === GrupoProfesional.LEGAL_A_CARGO) {
+      const otrosLegalACargo = await prisma.profesional.count({
+        where: {
+          grupo: GrupoProfesional.LEGAL_A_CARGO,
+          id: { not: id },
+        },
+      });
+      if (otrosLegalACargo === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "No se puede eliminar el ultimo profesional a cargo (escribano o abogado). Carga otro en maestros antes de borrar este.",
+          },
+          { status: 409 },
+        );
+      }
     }
 
     await prisma.profesional.delete({ where: { id } });
@@ -186,13 +237,13 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return NextResponse.json(
         {
           error:
-            "No se puede eliminar: hay asuntos que referencian a este profesional (a cargo, colaborador o contador). Reasignalos antes.",
+            "No se puede eliminar: hay asuntos que referencian a este miembro del equipo (a cargo, colaboradores o contador). Reasignalos antes.",
         },
         { status: 409 },
       );
     }
     if (esP2025(error)) {
-      return NextResponse.json({ error: "Profesional no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Miembro del equipo no encontrado." }, { status: 404 });
     }
     const detalle = mensajeErrorPrismaParaUsuario(error);
     const extraDev = mensajeErrorDesarrollo(error);
@@ -201,7 +252,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
         error:
           detalle ??
           extraDev ??
-          "No se pudo eliminar el profesional. Revisa la terminal del servidor.",
+          "No se pudo eliminar al miembro del equipo. Revisa la terminal del servidor.",
       },
       { status: 503 },
     );

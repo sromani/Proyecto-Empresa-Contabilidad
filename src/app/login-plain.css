@@ -1,0 +1,188 @@
+/**
+ * Estilos sin @tailwind: si PostCSS/Tailwind falla en el entorno, login y cabecera
+ * siguen viéndose con diseño razonable.
+ */
+.login-plain-header {
+  border-bottom: 1px solid rgb(23 37 84 / 0.2);
+  background: linear-gradient(to right, #172554, #1e3a8a, #1e40af);
+  box-shadow: 0 10px 15px -3px rgb(23 37 84 / 0.2);
+}
+
+.login-plain-header-inner {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 64rem;
+  display: flex;
+  align-items: center;
+  padding: 1rem 1rem;
+}
+
+.login-plain-header-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+
+.login-plain-main {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 64rem;
+  padding: 2rem 1rem;
+}
+
+.login-plain-center {
+  display: flex;
+  min-height: 70vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.login-plain-card {
+  width: 100%;
+  max-width: 28rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(191 219 254 / 0.8);
+  background-color: rgb(255 255 255 / 0.95);
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+}
+
+/* Layout principal si las utilidades de Tailwind no se generan */
+body > main {
+  box-sizing: border-box;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 64rem;
+  padding: 2rem 1rem;
+}
+
+.login-plain-card-head {
+  border-bottom: 1px solid #dbeafe;
+  padding-bottom: 1rem;
+  text-align: center;
+}
+
+.login-plain-card h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #172554;
+  margin: 0;
+}
+
+.login-plain-card .sub {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: rgb(30 64 175 / 0.75);
+}
+
+.login-plain-field {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.login-plain-field span {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #172554;
+}
+
+.login-plain-input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 0.5rem;
+  border: 1px solid #bfdbfe;
+  background-color: rgb(255 255 255 / 0.95);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #0f172a;
+}
+
+.login-plain-input:focus {
+  outline: 2px solid rgb(59 130 246 / 0.35);
+  outline-offset: 0;
+  border-color: #3b82f6;
+}
+
+.login-plain-btn {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: none;
+  background-color: #1d4ed8;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+
+.login-plain-btn:hover:not(:disabled) {
+  background-color: #1e40af;
+}
+
+.login-plain-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-plain-error {
+  margin-top: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #fecaca;
+  background-color: #fef2f2;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: #7f1d1d;
+}
+
+.login-plain-hint {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: rgb(30 64 175 / 0.65);
+}
+
+.login-plain-hint strong {
+  color: #1e40af;
+}
+
+/* Navegación autenticada si Tailwind no carga */
+.login-plain-brand {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #fff;
+  text-decoration: none;
+}
+
+.login-plain-header-inner a:not(.login-plain-brand) {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(219 234 254 / 0.95);
+  text-decoration: none;
+}
+
+.login-plain-header-inner a:not(.login-plain-brand):hover {
+  color: #fff;
+}
+
+.login-plain-logout {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(96 165 250 / 0.5);
+  background-color: rgb(23 37 84 / 0.3);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+  cursor: pointer;
+}
+
+.login-plain-logout:hover {
+  background-color: rgb(23 37 84 / 0.5);
+}

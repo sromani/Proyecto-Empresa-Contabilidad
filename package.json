@@ -15,6 +15,7 @@
     "prisma:generate:local": "node scripts/prisma-generate-local.js",
     "prisma:migrate": "node scripts/run-prisma.cjs migrate dev",
     "prisma:seed": "prisma db seed",
+    "prisma:seed:rsm": "node prisma/seed-rsm-people.js",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:wait": "node scripts/wait-postgres.js",

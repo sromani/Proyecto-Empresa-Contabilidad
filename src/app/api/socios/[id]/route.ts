@@ -53,11 +53,17 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const nombre = String(body?.nombre ?? "").trim();
+  const profesion = body?.profesion !== undefined ? String(body.profesion).trim() : undefined;
+  const funcion = body?.funcion !== undefined ? String(body.funcion).trim() : undefined;
   if (!nombre) {
     return NextResponse.json({ error: "El nombre del socio es obligatorio." }, { status: 400 });
   }
-  if (nombre.length > 500) {
-    return NextResponse.json({ error: "El nombre es demasiado largo." }, { status: 400 });
+  if (
+    nombre.length > 500 ||
+    (profesion !== undefined && profesion.length > 500) ||
+    (funcion !== undefined && funcion.length > 500)
+  ) {
+    return NextResponse.json({ error: "Algun texto supera el limite permitido." }, { status: 400 });
   }
 
   try {
@@ -68,7 +74,11 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const socio = await prisma.socio.update({
       where: { id },
-      data: { nombre },
+      data: {
+        nombre,
+        ...(profesion !== undefined ? { profesion } : {}),
+        ...(funcion !== undefined ? { funcion } : {}),
+      },
     });
 
     await registrarAuditoria({
@@ -76,7 +86,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       accion: "SOCIO_EDITAR",
       entidad: "Socio",
       entidadId: socio.id,
-      detalle: { antes: { nombre: anterior.nombre }, despues: { nombre: socio.nombre } },
+      detalle: {
+        antes: { nombre: anterior.nombre, profesion: anterior.profesion, funcion: anterior.funcion },
+        despues: { nombre: socio.nombre, profesion: socio.profesion, funcion: socio.funcion },
+      },
     });
 
     return NextResponse.json(socio);
@@ -125,6 +138,17 @@ export async function DELETE(_request: Request, context: RouteContext) {
     });
     if (!anterior) {
       return NextResponse.json({ error: "Socio no encontrado." }, { status: 404 });
+    }
+
+    const totalSocios = await prisma.socio.count();
+    if (totalSocios <= 1) {
+      return NextResponse.json(
+        {
+          error:
+            "No se puede eliminar el ultimo socio del estudio. Debe existir al menos uno en maestros; carga otro antes de borrar este.",
+        },
+        { status: 409 },
+      );
     }
 
     await prisma.socio.delete({ where: { id } });

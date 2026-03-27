@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { mensajeErrorApiDbAcceso } from "@/lib/api-db";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -24,13 +25,13 @@ export async function GET() {
       database: "ok",
       detalle: "Conexion con PostgreSQL activa",
     });
-  } catch {
+  } catch (e) {
     return NextResponse.json(
       {
         ok: false,
         app: "ok",
         database: "error",
-        detalle: "No se pudo conectar a PostgreSQL",
+        detalle: mensajeErrorApiDbAcceso(e),
       },
       { status: 503 },
     );

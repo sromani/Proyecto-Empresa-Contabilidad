@@ -94,19 +94,21 @@ export function BarraNavegacion() {
 
   if (pathname === "/login") {
     return (
-      <header className="border-b border-blue-950/20 bg-gradient-to-r from-blue-950 via-blue-900 to-blue-800 shadow-lg shadow-blue-950/20">
-        <nav className="mx-auto flex max-w-5xl items-center px-4 py-4">
-          <span className="text-lg font-bold tracking-tight text-white">Estudio UY — Acceso</span>
+      <header className="login-plain-header border-b border-blue-950/20 bg-gradient-to-r from-blue-950 via-blue-900 to-blue-800 shadow-lg shadow-blue-950/20">
+        <nav className="login-plain-header-inner max-w-5xl">
+          <span className="login-plain-header-title text-lg font-bold tracking-tight text-white">
+            Estudio UY — Acceso
+          </span>
         </nav>
       </header>
     );
   }
 
   return (
-    <header className="border-b border-blue-950/20 bg-gradient-to-r from-blue-950 via-blue-900 to-blue-800 shadow-lg shadow-blue-950/20">
-      <nav className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4">
+    <header className="login-plain-header border-b border-blue-950/20 bg-gradient-to-r from-blue-950 via-blue-900 to-blue-800 shadow-lg shadow-blue-950/20">
+      <nav className="login-plain-header-inner flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <Link className="text-lg font-bold tracking-tight text-white" href="/">
+          <Link className="login-plain-brand text-lg font-bold tracking-tight text-white" href="/">
             Estudio UY
           </Link>
           <span className="hidden h-5 w-px bg-blue-400/40 sm:block" aria-hidden />
@@ -125,7 +127,7 @@ export function BarraNavegacion() {
             </Link>
             {me?.rol === "ADMIN" ? (
               <Link className={linkNav} href="/maestros">
-                Socios y profesionales
+                Socios y equipo
               </Link>
             ) : null}
             {me?.rol === "ADMIN" ? (
@@ -144,7 +146,7 @@ export function BarraNavegacion() {
             <span className="text-sm text-blue-200/80">...</span>
           ) : null}
           <button
-            className="rounded-lg border border-blue-400/50 bg-blue-950/30 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-950/50"
+            className="login-plain-logout rounded-lg border border-blue-400/50 bg-blue-950/30 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-950/50"
             type="button"
             onClick={() => void cerrarSesion().catch(() => window.location.assign("/login"))}
           >

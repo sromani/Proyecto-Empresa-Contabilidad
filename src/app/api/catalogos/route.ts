@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requiereApiSesion } from "@/lib/api-auth";
-import { obtenerErrorConfiguracionDb } from "@/lib/api-db";
+import { mensajeErrorApiDbAcceso, obtenerErrorConfiguracionDb } from "@/lib/api-db";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -26,11 +26,11 @@ export async function GET() {
       }),
       prisma.profesional.findMany({
         orderBy: { nombre: "asc" },
-        select: { id: true, nombre: true, profesion: true, funcion: true, rol: true },
+        select: { id: true, nombre: true, profesion: true, funcion: true, grupo: true, puesto: true },
       }),
       prisma.socio.findMany({
         orderBy: { nombre: "asc" },
-        select: { id: true, nombre: true },
+        select: { id: true, nombre: true, profesion: true, funcion: true },
       }),
     ]);
 
@@ -40,10 +40,7 @@ export async function GET() {
       profesionales,
       socios,
     });
-  } catch {
-    return NextResponse.json(
-      { error: "No se pudo conectar a PostgreSQL. Revisa DATABASE_URL y el servidor de base." },
-      { status: 503 },
-    );
+  } catch (e) {
+    return NextResponse.json({ error: mensajeErrorApiDbAcceso(e) }, { status: 503 });
   }
 }

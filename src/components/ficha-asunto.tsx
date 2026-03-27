@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import {
+  type PuestoCatalogo,
+  ETIQUETA_PUESTO,
+} from "@/lib/profesional-equipo-catalogo";
 
 type RolMe =
   | "ADMIN"
@@ -27,8 +31,9 @@ type AsuntoFicha = {
   cliente: { id: string; nombre: string; documento: string; telefono?: string | null; email?: string | null };
   catalogo: { nombre: string };
   socioReferente: { nombre: string };
-  profesionalACargo: { id: string; nombre: string; rol: string };
+  profesionalACargo: { id: string; nombre: string; puesto: string; funcion?: string | null };
   colaboradorACargo: { id: string; nombre: string } | null;
+  colaboradorACargo2: { id: string; nombre: string } | null;
   contadorReferente: { id: string; nombre: string } | null;
   seguimientos: {
     id: string;
@@ -305,12 +310,22 @@ export function FichaAsunto({ id }: { id: string }) {
             <span className="text-blue-800/80">Socio referente:</span> {asunto.socioReferente.nombre}
           </p>
           <p>
-            <span className="text-blue-800/80">Profesional a cargo:</span> {asunto.profesionalACargo.nombre} (
-            {asunto.profesionalACargo.rol})
+            <span className="text-blue-800/80">Equipo a cargo:</span> {asunto.profesionalACargo.nombre}
+            <span className="text-blue-800/70">
+              {" "}
+              ({ETIQUETA_PUESTO[asunto.profesionalACargo.puesto as PuestoCatalogo] ??
+                asunto.profesionalACargo.puesto}
+              {asunto.profesionalACargo.funcion ? ` — ${asunto.profesionalACargo.funcion}` : ""})
+            </span>
           </p>
           {asunto.colaboradorACargo ? (
             <p>
-              <span className="text-blue-800/80">Colaborador:</span> {asunto.colaboradorACargo.nombre}
+              <span className="text-blue-800/80">Colaborador 1:</span> {asunto.colaboradorACargo.nombre}
+            </p>
+          ) : null}
+          {asunto.colaboradorACargo2 ? (
+            <p>
+              <span className="text-blue-800/80">Colaborador 2:</span> {asunto.colaboradorACargo2.nombre}
             </p>
           ) : null}
           {asunto.contadorReferente ? (

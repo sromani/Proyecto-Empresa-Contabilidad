@@ -1,10 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type PuestoCatalogo,
+  ETIQUETA_PUESTO,
+} from "@/lib/profesional-equipo-catalogo";
 
 type TipoAsunto = "TODOS" | "NOTARIAL" | "LEGAL";
-type RolProfesional = "SOCIO" | "ESCRIBANO" | "ABOGADO" | "PROCURADOR" | "CONTADOR";
 
 type ClienteItem = {
   id: string;
@@ -17,13 +20,20 @@ type AsuntoItem = {
   nombre: string;
 };
 
+type GrupoProfCatalogo = "DIRECCION" | "LEGAL_A_CARGO" | "LEGAL_COLABORADOR" | "CONTADOR";
+
 type ProfesionalItem = {
   id: string;
   nombre: string;
   profesion: string;
   funcion: string;
-  rol: RolProfesional;
+  grupo: GrupoProfCatalogo;
+  puesto: string;
 };
+
+function etiquetaPuesto(puesto: string): string {
+  return ETIQUETA_PUESTO[puesto as PuestoCatalogo] ?? puesto;
+}
 
 type SocioItem = {
   id: string;
@@ -55,6 +65,7 @@ export function FormularioAsunto() {
   const [nuevoAsunto, setNuevoAsunto] = useState("");
   const [profesionalACargoId, setProfesionalACargoId] = useState("");
   const [colaboradorACargoId, setColaboradorACargoId] = useState("");
+  const [colaboradorACargo2Id, setColaboradorACargo2Id] = useState("");
   const [contadorReferenteId, setContadorReferenteId] = useState("");
   const [socioReferente, setSocioReferente] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -64,8 +75,31 @@ export function FormularioAsunto() {
   const [guardando, setGuardando] = useState(false);
   const [cargando, setCargando] = useState(true);
 
-  const profesionalesOperativos = profesionales.filter((p) => p.rol !== "CONTADOR");
-  const contadores = profesionales.filter((p) => p.rol === "CONTADOR");
+  const profesionalesLegalACargo = profesionales.filter((p) => p.grupo === "LEGAL_A_CARGO");
+  const colaboradoresLegal = profesionales.filter((p) => p.grupo === "LEGAL_COLABORADOR");
+  const contadores = profesionales.filter((p) => p.grupo === "CONTADOR");
+
+  const elegiblesColaboracion = useMemo(
+    () => colaboradoresLegal.filter((p) => p.id !== profesionalACargoId),
+    [colaboradoresLegal, profesionalACargoId],
+  );
+
+  const elegiblesColaborador2 = useMemo(
+    () =>
+      elegiblesColaboracion.filter(
+        (p) => !colaboradorACargoId || p.id !== colaboradorACargoId,
+      ),
+    [elegiblesColaboracion, colaboradorACargoId],
+  );
+
+  useEffect(() => {
+    setColaboradorACargoId((c) => (c === profesionalACargoId ? "" : c));
+    setColaboradorACargo2Id((c2) => (c2 === profesionalACargoId ? "" : c2));
+  }, [profesionalACargoId]);
+
+  useEffect(() => {
+    setColaboradorACargo2Id((c2) => (c2 && c2 === colaboradorACargoId ? "" : c2));
+  }, [colaboradorACargoId]);
 
   useEffect(() => {
     async function cargarCatalogos() {
@@ -87,9 +121,9 @@ export function FormularioAsunto() {
         setAsuntoSeleccionado(asuntosData[0]?.nombre ?? "");
         setSocioReferente(sociosData[0]?.id ?? "");
         setProfesionalACargoId(
-          profesionalesData.find((p) => p.rol !== "CONTADOR")?.id ?? "",
+          profesionalesData.find((p) => p.grupo === "LEGAL_A_CARGO")?.id ?? "",
         );
-        setContadorReferenteId(profesionalesData.find((p) => p.rol === "CONTADOR")?.id ?? "");
+        setContadorReferenteId(profesionalesData.find((p) => p.grupo === "CONTADOR")?.id ?? "");
       } catch {
         setMensaje("Error al cargar catalogos.");
       } finally {
@@ -175,12 +209,21 @@ export function FormularioAsunto() {
     }
 
     if (!profesionalACargoId) {
-      setMensaje("Debes indicar el profesional a cargo.");
+      setMensaje("Debés indicar el equipo a cargo.");
       return;
     }
 
     if (!socioReferente) {
       setMensaje("Debes definir un socio referente.");
+      return;
+    }
+
+    if (
+      colaboradorACargoId &&
+      colaboradorACargo2Id &&
+      colaboradorACargoId === colaboradorACargo2Id
+    ) {
+      setMensaje("Los dos colaboradores deben ser personas distintas.");
       return;
     }
 
@@ -195,6 +238,7 @@ export function FormularioAsunto() {
           asuntoNombre: asuntoSeleccionado.trim(),
           profesionalACargoId,
           colaboradorACargoId: colaboradorACargoId || null,
+          colaboradorACargo2Id: colaboradorACargo2Id || null,
           contadorReferenteId: contadorReferenteId || null,
           socioReferenteId: socioReferente,
           descripcion: descripcion.trim() || null,
@@ -229,7 +273,7 @@ export function FormularioAsunto() {
       <div className="border-b border-blue-100 pb-4">
         <h2 className="text-xl font-semibold text-blue-950">Nuevo Asunto</h2>
         <p className="mt-1 text-sm text-blue-800/70">
-          Tipo, cliente, catalogo, equipo (profesional a cargo obligatorio) y fechas.
+          Tipo, cliente, catalogo, equipo a cargo obligatorio y fechas.
         </p>
       </div>
 
@@ -390,32 +434,53 @@ export function FormularioAsunto() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-1.5">
-          <span className="text-sm font-medium text-blue-950">Profesional a cargo *</span>
+          <span className="text-sm font-medium text-blue-950">Equipo a cargo *</span>
           <select
             className="input-app"
             value={profesionalACargoId}
             onChange={(e) => setProfesionalACargoId(e.target.value)}
           >
-            {profesionalesOperativos.length === 0 ? <option value="">Sin profesionales</option> : null}
-            {profesionalesOperativos.map((p) => (
+            {profesionalesLegalACargo.length === 0 ? (
+              <option value="">Sin profesionales a cargo en maestros</option>
+            ) : null}
+            {profesionalesLegalACargo.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.nombre} — {p.profesion} ({p.rol})
+                {p.nombre} — {etiquetaPuesto(p.puesto)}
+                {p.funcion ? ` (${p.funcion})` : ""}
               </option>
             ))}
           </select>
         </label>
 
         <label className="space-y-1.5">
-          <span className="text-sm font-medium text-blue-950">Colaborador a cargo (opcional)</span>
+          <span className="text-sm font-medium text-blue-950">Colaborador 1 (opcional)</span>
           <select
             className="input-app"
             value={colaboradorACargoId}
             onChange={(e) => setColaboradorACargoId(e.target.value)}
           >
             <option value="">—</option>
-            {profesionalesOperativos.map((p) => (
+            {elegiblesColaboracion.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.nombre}
+                {p.nombre} — {etiquetaPuesto(p.puesto)}
+                {p.funcion ? ` (${p.funcion})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-sm font-medium text-blue-950">Colaborador 2 (opcional)</span>
+          <select
+            className="input-app"
+            value={colaboradorACargo2Id}
+            onChange={(e) => setColaboradorACargo2Id(e.target.value)}
+          >
+            <option value="">—</option>
+            {elegiblesColaborador2.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} — {etiquetaPuesto(p.puesto)}
+                {p.funcion ? ` (${p.funcion})` : ""}
               </option>
             ))}
           </select>
@@ -432,9 +497,13 @@ export function FormularioAsunto() {
             {contadores.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre}
+                {p.funcion ? ` — ${p.funcion}` : ""}
               </option>
             ))}
           </select>
+          <p className="text-xs text-blue-800/65">
+            Los contadores se cargan en Maestros, sección Contador.
+          </p>
         </label>
       </div>
 

@@ -9,7 +9,7 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-[70vh] flex-col items-center justify-center px-4">
+    <div className="login-plain-center flex min-h-[70vh] flex-col items-center justify-center px-4">
       <FormularioLogin />
     </div>
   );
