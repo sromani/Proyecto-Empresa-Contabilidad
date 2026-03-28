@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { COOKIE_SESSION, SESSION_MAX_AGE } from "@/lib/auth-constants";
+import { COOKIE_SESSION, SESSION_MAX_AGE, sessionCookieSecure } from "@/lib/auth-constants";
 import { prisma } from "@/lib/prisma";
 import { obtenerSesionServidor } from "@/lib/session-server";
 
@@ -32,7 +32,7 @@ export async function GET() {
       path: "/",
       maxAge: SESSION_MAX_AGE,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: sessionCookieSecure(),
     });
   }
 

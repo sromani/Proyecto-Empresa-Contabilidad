@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { COOKIE_SESSION, SESSION_MAX_AGE } from "@/lib/auth-constants";
+import { COOKIE_SESSION, SESSION_MAX_AGE, sessionCookieSecure } from "@/lib/auth-constants";
 import { ejecutarLoginServidor } from "@/lib/login-servidor";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: SESSION_MAX_AGE,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: sessionCookieSecure(),
   });
 
   return response;
